@@ -1,4 +1,4 @@
-import { DefaultResourceLoader } from '@mariozechner/pi-coding-agent'
+import { DefaultResourceLoader } from '@gsd/pi-coding-agent'
 import { homedir } from 'node:os'
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'

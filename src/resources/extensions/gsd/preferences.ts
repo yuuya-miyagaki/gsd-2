@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
-import { getAgentDir } from "@mariozechner/pi-coding-agent";
+import { getAgentDir } from "@gsd/pi-coding-agent";
 import type { GitPreferences } from "./git-service.ts";
 import { VALID_BRANCH_NAME } from "./git-service.ts";
 

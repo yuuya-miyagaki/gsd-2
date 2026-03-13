@@ -11,7 +11,7 @@
  */
 
 import { exec } from 'node:child_process'
-import type { AuthStorage } from '@mariozechner/pi-coding-agent'
+import type { AuthStorage } from '@gsd/pi-coding-agent'
 import { renderLogo } from './logo.js'
 
 // ─── Types ────────────────────────────────────────────────────────────────────

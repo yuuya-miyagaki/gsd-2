@@ -10,8 +10,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
-import type { ExtensionAPI, Theme } from "@mariozechner/pi-coding-agent";
-import { CURSOR_MARKER, Editor, type EditorTheme, Key, matchesKey, Text, truncateToWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui";
+import type { ExtensionAPI, Theme } from "@gsd/pi-coding-agent";
+import { CURSOR_MARKER, Editor, type EditorTheme, Key, matchesKey, Text, truncateToWidth, wrapTextWithAnsi } from "@gsd/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { makeUI, type ProgressStatus } from "./shared/ui.js";
 import { parseSecretsManifest, formatSecretsManifest } from "./gsd/files.js";

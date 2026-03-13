@@ -8,7 +8,7 @@ import {
   InteractiveMode,
   runPrintMode,
   runRpcMode,
-} from '@mariozechner/pi-coding-agent'
+} from '@gsd/pi-coding-agent'
 import { existsSync, readdirSync, renameSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { agentDir, sessionsDir, authFilePath } from './app-paths.js'

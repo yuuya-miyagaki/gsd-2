@@ -154,7 +154,7 @@ test("initResources syncs extensions, agents, and AGENTS.md to target dir", asyn
 
 test("loadStoredEnvKeys hydrates process.env from auth.json", async () => {
   const { loadStoredEnvKeys } = await import("../wizard.ts");
-  const { AuthStorage } = await import("@mariozechner/pi-coding-agent");
+  const { AuthStorage } = await import("@gsd/pi-coding-agent");
 
   const tmp = mkdtempSync(join(tmpdir(), "gsd-wizard-test-"));
   const authPath = join(tmp, "auth.json");
@@ -203,7 +203,7 @@ test("loadStoredEnvKeys hydrates process.env from auth.json", async () => {
 
 test("loadStoredEnvKeys does not overwrite existing env vars", async () => {
   const { loadStoredEnvKeys } = await import("../wizard.ts");
-  const { AuthStorage } = await import("@mariozechner/pi-coding-agent");
+  const { AuthStorage } = await import("@gsd/pi-coding-agent");
 
   const tmp = mkdtempSync(join(tmpdir(), "gsd-wizard-nooverwrite-"));
   const authPath = join(tmp, "auth.json");

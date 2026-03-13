@@ -21,8 +21,8 @@
 import type {
   ExtensionAPI,
   ExtensionContext,
-} from "@mariozechner/pi-coding-agent";
-import { createBashTool, createWriteTool, createReadTool, createEditTool } from "@mariozechner/pi-coding-agent";
+} from "@gsd/pi-coding-agent";
+import { createBashTool, createWriteTool, createReadTool, createEditTool } from "@gsd/pi-coding-agent";
 
 import { registerGSDCommand } from "./commands.js";
 import { registerWorktreeCommand, getWorktreeOriginalCwd, getActiveWorktreeName } from "./worktree-command.js";
@@ -44,11 +44,11 @@ import {
   relSliceFile, relSlicePath, relTaskFile,
   buildSliceFileName, gsdRoot,
 } from "./paths.js";
-import { Key } from "@mariozechner/pi-tui";
+import { Key } from "@gsd/pi-tui";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { shortcutDesc } from "../shared/terminal.js";
-import { Text } from "@mariozechner/pi-tui";
+import { Text } from "@gsd/pi-tui";
 
 // ── ASCII logo ────────────────────────────────────────────────────────────
 const GSD_LOGO_LINES = [
