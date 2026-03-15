@@ -69,7 +69,7 @@ describe('parseMarketplaceJson', { skip: skipReason }, () => {
   });
 });
 
-describe('resolvePluginRoot', () => {
+describe('resolvePluginRoot', { skip: skipReason }, () => {
   it('should resolve relative paths correctly', () => {
     const result = resolvePluginRoot(CLAUDE_SKILLS_PATH!, './plugins/python3-development');
     assert.strictEqual(result, path.join(CLAUDE_SKILLS_PATH!, 'plugins/python3-development'));
@@ -91,7 +91,7 @@ describe('resolvePluginRoot', () => {
   });
 });
 
-describe('inspectPlugin', () => {
+describe('inspectPlugin', { skip: skipReason }, () => {
   it('should inspect a plugin with plugin.json', () => {
     const pluginDir = path.join(CLAUDE_SKILLS_PATH!, 'plugins/python3-development');
     const result = inspectPlugin(pluginDir);
@@ -114,7 +114,7 @@ describe('inspectPlugin', () => {
   });
 });
 
-describe('discoverMarketplace', () => {
+describe('discoverMarketplace', { skip: skipReason }, () => {
   it('should discover all plugins in jamie-style marketplace', () => {
     const result = discoverMarketplace(CLAUDE_SKILLS_PATH!);
     
@@ -190,7 +190,7 @@ describe('discoverMarketplace', () => {
   });
 });
 
-describe('smoke test', () => {
+describe('smoke test', { skip: skipReason }, () => {
   it('should be able to run discovery from both marketplace repos', () => {
     const jamieResult = discoverMarketplace(CLAUDE_SKILLS_PATH!);
     const officialResult = discoverMarketplace(CLAUDE_PLUGINS_OFFICIAL_PATH!);
