@@ -38,7 +38,9 @@ test('enableDebug creates log file and sets enabled', () => {
   assert.strictEqual(isDebugEnabled(), true);
   const logPath = getDebugLogPath();
   assert.ok(logPath, 'log path should be set');
-  assert.ok(logPath!.includes('.gsd/debug/debug-'), 'log path should be in .gsd/debug/');
+  // Normalize path separators for Windows compatibility
+  const normalized = logPath!.replace(/\\/g, '/');
+  assert.ok(normalized.includes('.gsd/debug/debug-'), 'log path should be in .gsd/debug/');
   assert.ok(logPath!.endsWith('.log'), 'log path should end with .log');
 
   disableDebug();
