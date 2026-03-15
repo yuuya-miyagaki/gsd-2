@@ -17,13 +17,20 @@ import {
   resolvePluginRoot
 } from '../marketplace-discovery';
 
-// Use absolute paths to the external marketplace repos
-// These repos are located at /home/ubuntulinuxqa2/repos/
-const REPOS_BASE = '/home/ubuntulinuxqa2/repos';
-const CLAUDE_SKILLS_PATH = path.join(REPOS_BASE, 'claude_skills');
-const CLAUDE_PLUGINS_OFFICIAL_PATH = path.join(REPOS_BASE, 'claude-plugins-official');
+// Resolve paths relative to the gsd-2 project root so CI can skip cleanly when repos are absent
+const GSD2_ROOT = path.resolve(import.meta.dirname, '../../../../..');
+const CLAUDE_SKILLS_PATH = path.resolve(GSD2_ROOT, '../claude_skills');
+const CLAUDE_PLUGINS_OFFICIAL_PATH = path.resolve(GSD2_ROOT, '../claude-plugins-official');
 
-describe('parseMarketplaceJson', () => {
+function marketplacesAvailable(): boolean {
+  return fs.existsSync(CLAUDE_SKILLS_PATH) && fs.existsSync(CLAUDE_PLUGINS_OFFICIAL_PATH);
+}
+
+const skipReason = !marketplacesAvailable()
+  ? `Marketplace repos not found: ${CLAUDE_SKILLS_PATH}, ${CLAUDE_PLUGINS_OFFICIAL_PATH}`
+  : undefined;
+
+describe('parseMarketplaceJson', { skip: skipReason }, () => {
   it('should parse jamie-style marketplace.json', () => {
     const result = parseMarketplaceJson(CLAUDE_SKILLS_PATH);
     assert.strictEqual(result.success, true);

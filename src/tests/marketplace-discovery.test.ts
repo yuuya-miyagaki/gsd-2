@@ -10,7 +10,7 @@
  * Tests run against real data, not synthetic fixtures.
  */
 
-import { describe, it, before } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
@@ -27,7 +27,15 @@ const REPOS_BASE = path.resolve(import.meta.dirname, '../../..');
 const CLAUDE_SKILLS_PATH = path.join(REPOS_BASE, 'claude_skills');
 const CLAUDE_PLUGINS_OFFICIAL_PATH = path.join(REPOS_BASE, 'claude-plugins-official');
 
-describe('Marketplace Discovery Contract Tests', () => {
+function marketplacesAvailable(): boolean {
+  return fs.existsSync(CLAUDE_SKILLS_PATH) && fs.existsSync(CLAUDE_PLUGINS_OFFICIAL_PATH);
+}
+
+const skipReason = !marketplacesAvailable()
+  ? `Marketplace repos not found: ${CLAUDE_SKILLS_PATH}, ${CLAUDE_PLUGINS_OFFICIAL_PATH}`
+  : undefined;
+
+describe('Marketplace Discovery Contract Tests', { skip: skipReason }, () => {
   describe('claude_skills marketplace (jamie-style)', () => {
     it('should discover at least 15 plugins', () => {
       const result = discoverMarketplace(CLAUDE_SKILLS_PATH);
