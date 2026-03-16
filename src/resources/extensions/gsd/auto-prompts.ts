@@ -15,11 +15,41 @@ import {
   relMilestoneFile, relSliceFile, relSlicePath, relMilestonePath,
   resolveGsdRootFile, relGsdRootFile,
 } from "./paths.js";
-import { resolveSkillDiscoveryMode, resolveInlineLevel } from "./preferences.js";
+import { resolveSkillDiscoveryMode, resolveInlineLevel, loadEffectiveGSDPreferences } from "./preferences.js";
 import type { GSDState, InlineLevel } from "./types.js";
 import type { GSDPreferences } from "./preferences.js";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
+import { computeBudgets, resolveExecutorContextWindow } from "./context-budget.js";
+
+// ─── Executor Constraints ─────────────────────────────────────────────────────
+
+/**
+ * Format executor context constraints for injection into the plan-slice prompt.
+ * Uses the budget engine to compute task count ranges and inline context budgets
+ * based on the configured executor model's context window.
+ */
+function formatExecutorConstraints(): string {
+  let windowTokens: number;
+  try {
+    const prefs = loadEffectiveGSDPreferences();
+    windowTokens = resolveExecutorContextWindow(undefined, prefs?.preferences);
+  } catch {
+    windowTokens = 200_000; // safe default
+  }
+  const budgets = computeBudgets(windowTokens);
+  const { min, max } = budgets.taskCountRange;
+  const execWindowK = Math.round(windowTokens / 1000);
+  const perTaskBudgetK = Math.round(budgets.inlineContextBudgetChars / 1000);
+  return [
+    `## Executor Context Constraints`,
+    ``,
+    `The agent that executes each task has a **${execWindowK}K token** context window.`,
+    `- Recommended task count for this slice: **${min}–${max} tasks**`,
+    `- Each task gets ~${perTaskBudgetK}K chars of inline context (plans, code, decisions)`,
+    `- Keep individual tasks completable within a single context window — if a task needs more context than fits, split it`,
+  ].join("\n");
+}
 
 // ─── Inline Helpers ───────────────────────────────────────────────────────
 
@@ -603,6 +633,9 @@ export async function buildPlanSlicePrompt(
 
   const inlinedContext = `## Inlined Context (preloaded — do not re-read these files)\n\n${inlined.join("\n\n---\n\n")}`;
 
+  // Build executor context constraints from the budget engine
+  const executorContextConstraints = formatExecutorConstraints();
+
   const outputRelPath = relSliceFile(base, mid, sid, "PLAN");
   return loadPrompt("plan-slice", {
     workingDirectory: base,
@@ -613,6 +646,7 @@ export async function buildPlanSlicePrompt(
     outputPath: join(base, outputRelPath),
     inlinedContext,
     dependencySummaries: depContent,
+    executorContextConstraints,
   });
 }
 
