@@ -214,7 +214,11 @@ export function findMilestoneIds(basePath: string): string[] {
     // Apply custom queue order if available, else fall back to numeric sort
     const customOrder = loadQueueOrder(basePath);
     return sortByQueueOrder(ids, customOrder);
-  } catch {
+  } catch (err) {
+    // Log why milestone scanning failed — silent [] here causes infinite loops (#456)
+    if (existsSync(dir)) {
+      console.error(`[gsd] findMilestoneIds: .gsd/milestones/ exists but readdirSync failed — ${err instanceof Error ? err.message : String(err)}`);
+    }
     return [];
   }
 }
@@ -1002,6 +1006,27 @@ export async function showSmartEntry(
     }
 
     const milestoneIds = findMilestoneIds(basePath);
+
+    // Sanity check (#456): if findMilestoneIds returns [] but the milestones
+    // directory has contents, something went wrong (permissions, stale worktree
+    // cwd, etc). Warn instead of silently starting a new-project flow.
+    if (milestoneIds.length === 0) {
+      const mDir = milestonesDir(basePath);
+      if (existsSync(mDir)) {
+        try {
+          const entries = readdirSync(mDir);
+          if (entries.length > 0) {
+            ctx.ui.notify(
+              `Milestone directory has ${entries.length} entries but none were recognized as milestones. ` +
+              `This may indicate a corrupted state or wrong working directory. Run \`/gsd doctor\` to diagnose.`,
+              "warning",
+            );
+            return;
+          }
+        } catch { /* directory exists but unreadable — fall through to normal flow */ }
+      }
+    }
+
     const uniqueMilestoneIds = !!loadEffectiveGSDPreferences()?.preferences?.unique_milestone_ids;
     const nextId = nextMilestoneId(milestoneIds, uniqueMilestoneIds);
     const isFirst = milestoneIds.length === 0;
