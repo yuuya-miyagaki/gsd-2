@@ -121,6 +121,11 @@ test("matchPacksForProject: FastAPI does not match generic Python", () => {
   assert.ok(!labels.includes("FastAPI"), "FastAPI should NOT match generic Python projects");
 });
 
+test("matchPacksForProject: FastAPI matches when dep:fastapi detected", () => {
+  const labels = packLabels(makeSignals({ primaryLanguage: "python", detectedFiles: ["pyproject.toml", "dep:fastapi"] }));
+  assert.ok(labels.includes("FastAPI"), "FastAPI should match when dep:fastapi is in detectedFiles");
+});
+
 test("matchPacksForProject: Spring Boot does not match via language alone", () => {
   // Simulate Android project: has java/kotlin language but no root pom.xml/build.gradle
   const labels = packLabels(makeSignals({ primaryLanguage: "java/kotlin", detectedFiles: ["app/build.gradle"] }));

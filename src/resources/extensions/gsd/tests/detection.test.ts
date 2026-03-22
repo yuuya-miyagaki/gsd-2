@@ -667,3 +667,38 @@ test("detectProjectSignals: Tailwind via tailwind.config.ts", () => {
     cleanup(dir);
   }
 });
+
+test("detectProjectSignals: FastAPI detected via requirements.txt dependency", () => {
+  const dir = makeTempDir("signals-fastapi-req");
+  try {
+    writeFileSync(join(dir, "requirements.txt"), "fastapi==0.115.0\nuvicorn[standard]\n", "utf-8");
+    const signals = detectProjectSignals(dir);
+    assert.ok(signals.detectedFiles.includes("dep:fastapi"), "should add dep:fastapi marker");
+    assert.equal(signals.primaryLanguage, "python");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("detectProjectSignals: FastAPI detected via pyproject.toml dependency", () => {
+  const dir = makeTempDir("signals-fastapi-pyproject");
+  try {
+    writeFileSync(join(dir, "pyproject.toml"), '[project]\ndependencies = ["fastapi>=0.100"]\n', "utf-8");
+    const signals = detectProjectSignals(dir);
+    assert.ok(signals.detectedFiles.includes("dep:fastapi"), "should add dep:fastapi marker");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("detectProjectSignals: Django project does NOT get dep:fastapi marker", () => {
+  const dir = makeTempDir("signals-django-no-fastapi");
+  try {
+    writeFileSync(join(dir, "requirements.txt"), "django==5.0\ncelery\n", "utf-8");
+    writeFileSync(join(dir, "manage.py"), "#!/usr/bin/env python", "utf-8");
+    const signals = detectProjectSignals(dir);
+    assert.ok(!signals.detectedFiles.includes("dep:fastapi"), "should NOT add dep:fastapi for Django");
+  } finally {
+    cleanup(dir);
+  }
+});

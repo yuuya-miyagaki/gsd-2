@@ -371,6 +371,24 @@ export function detectProjectSignals(basePath: string): ProjectSignals {
     // unreadable root — skip extension scan
   }
 
+  // Python framework detection — scan dependency files for framework-specific packages.
+  // Adds synthetic markers (e.g. "dep:fastapi") so skill catalog matchFiles can reference them.
+  if (detectedFiles.includes("requirements.txt") || detectedFiles.includes("pyproject.toml")) {
+    try {
+      const depContent: string[] = [];
+      const reqPath = join(basePath, "requirements.txt");
+      if (existsSync(reqPath)) depContent.push(readBounded(reqPath, 64 * 1024));
+      const pyprojectPath = join(basePath, "pyproject.toml");
+      if (existsSync(pyprojectPath)) depContent.push(readBounded(pyprojectPath, 64 * 1024));
+      const combined = depContent.join("\n").toLowerCase();
+      if (/\bfastapi\b/.test(combined)) {
+        detectedFiles.push("dep:fastapi");
+      }
+    } catch {
+      // unreadable dependency files — skip framework scan
+    }
+  }
+
   // Git repo detection
   const isGitRepo = existsSync(join(basePath, ".git"));
 

@@ -394,14 +394,14 @@ export const SKILL_CATALOG: SkillPack[] = [
     matchLanguages: ["python"],
     matchFiles: ["pyproject.toml", "setup.py", "requirements.txt"],
   },
-  // FastAPI — no brownfield auto-detection (generic Python markers can't
-  // distinguish FastAPI from other frameworks). Available via greenfield
-  // stack selection or manual install: npx skills add wshobson/agents --skill fastapi-templates
+  // FastAPI — detected by scanning requirements.txt / pyproject.toml for the
+  // "fastapi" dependency. Uses the "dep:fastapi" synthetic marker from detection.ts.
   {
     label: "FastAPI",
     description: "Production-ready FastAPI projects with async patterns and error handling",
     repo: "wshobson/agents",
     skills: ["fastapi-templates"],
+    matchFiles: ["dep:fastapi"],
   },
   // ── Go ────────────────────────────────────────────────────────────────────
   {
