@@ -47,8 +47,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Add Rust cross-compilation target
-        if: matrix.cross
+      - name: Add Rust compilation target
         run: rustup target add ${{ matrix.target }}
 
       - name: Cache Rust build artifacts
