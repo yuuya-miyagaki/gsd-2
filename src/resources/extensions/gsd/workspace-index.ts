@@ -2,6 +2,7 @@ import { join } from "node:path";
 
 import { loadFile } from "./files.js";
 import { isDbAvailable, getMilestoneSlices, getSliceTasks } from "./gsd-db.js";
+import { parseRoadmap, parsePlan } from "./parsers-legacy.js";
 import {
   resolveMilestoneFile,
   resolveSliceFile,
@@ -79,21 +80,40 @@ async function indexSlice(basePath: string, milestoneId: string, sliceId: string
   const tasks: WorkspaceTaskTarget[] = [];
   let title = fallbackTitle;
 
-  // Prefer DB for task data
+  // Prefer DB for task data, fall back to file parsing when DB has no data
+  let usedDb = false;
   if (isDbAvailable()) {
     const dbTasks = getSliceTasks(milestoneId, sliceId);
-    for (const task of dbTasks) {
-      title = fallbackTitle; // title comes from slice-level data, not plan
-      tasks.push({
-        id: task.id,
-        title: task.title,
-        done: task.status === "complete" || task.status === "done",
-        planPath: resolveTaskFile(basePath, milestoneId, sliceId, task.id, "PLAN") ?? undefined,
-        summaryPath: resolveTaskFile(basePath, milestoneId, sliceId, task.id, "SUMMARY") ?? undefined,
-      });
+    if (dbTasks.length > 0) {
+      usedDb = true;
+      for (const task of dbTasks) {
+        title = fallbackTitle; // title comes from slice-level data, not plan
+        tasks.push({
+          id: task.id,
+          title: task.title,
+          done: task.status === "complete" || task.status === "done",
+          planPath: resolveTaskFile(basePath, milestoneId, sliceId, task.id, "PLAN") ?? undefined,
+          summaryPath: resolveTaskFile(basePath, milestoneId, sliceId, task.id, "SUMMARY") ?? undefined,
+        });
+      }
     }
   }
-  // When DB unavailable, tasks stays empty
+  if (!usedDb && planPath) {
+    // File-based fallback: parse slice plan for task entries
+    const planContent = await loadFile(planPath);
+    if (planContent) {
+      const parsed = parsePlan(planContent);
+      for (const task of parsed.tasks) {
+        tasks.push({
+          id: task.id,
+          title: task.title,
+          done: task.done,
+          planPath: resolveTaskFile(basePath, milestoneId, sliceId, task.id, "PLAN") ?? undefined,
+          summaryPath: resolveTaskFile(basePath, milestoneId, sliceId, task.id, "SUMMARY") ?? undefined,
+        });
+      }
+    }
+  }
 
   return {
     id: sliceId,
@@ -125,23 +145,34 @@ export async function indexWorkspace(basePath: string, opts: IndexWorkspaceOptio
     const slices: WorkspaceSliceTarget[] = [];
 
     if (roadmapPath || isDbAvailable()) {
-      // Normalize slices from DB
+      // Normalize slices from DB, fall back to file-based parsing when DB has no data
       type NormSlice = { id: string; done: boolean; title: string; risk: string; depends: string[]; demo: string };
-      let normSlices: NormSlice[];
+      let normSlices: NormSlice[] | null = null;
       if (isDbAvailable()) {
-        normSlices = getMilestoneSlices(milestoneId).map(s => ({ id: s.id, done: s.status === "complete", title: s.title, risk: s.risk || "medium", depends: s.depends, demo: s.demo }));
+        const dbSlices = getMilestoneSlices(milestoneId);
+        if (dbSlices.length > 0) {
+          normSlices = dbSlices.map(s => ({ id: s.id, done: s.status === "complete", title: s.title, risk: s.risk || "medium", depends: s.depends, demo: s.demo }));
+        }
         // Get title from roadmap header
         if (roadmapPath) {
           const roadmapContent = await loadFile(roadmapPath);
           if (roadmapContent) title = titleFromRoadmapHeader(roadmapContent, milestoneId);
         }
-      } else {
-        normSlices = [];
       }
+      if (!normSlices && roadmapPath) {
+        // File-based fallback: parse roadmap for slice entries
+        const roadmapContent = await loadFile(roadmapPath);
+        if (roadmapContent) {
+          title = titleFromRoadmapHeader(roadmapContent, milestoneId);
+          const parsed = parseRoadmap(roadmapContent);
+          normSlices = parsed.slices.map(s => ({ id: s.id, done: s.done, title: s.title, risk: s.risk || "medium", depends: s.depends, demo: s.demo || "" }));
+        }
+      }
+      if (!normSlices) normSlices = [];
 
-      if (normSlices!.length > 0) {
+      if (normSlices.length > 0) {
         const sliceResults = await Promise.all(
-          normSlices!.map(async (slice) => {
+          normSlices.map(async (slice) => {
             return indexSlice(basePath, milestoneId, slice.id, slice.title, slice.done, { risk: slice.risk as RiskLevel, depends: slice.depends, demo: slice.demo });
           }),
         );

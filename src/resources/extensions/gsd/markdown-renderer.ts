@@ -933,12 +933,14 @@ export async function repairStaleRenders(basePath: string): Promise<number> {
 
   for (const entry of staleEntries) {
     if (repairedPaths.has(entry.path)) continue;
+    // Normalize path separators for cross-platform regex matching
+    const normPath = entry.path.replace(/\\/g, "/");
 
     try {
       // Determine repair action from the reason
       if (entry.reason.includes("in roadmap")) {
         // Roadmap checkbox mismatch — extract milestone ID from path
-        const milestoneMatch = entry.path.match(/milestones\/([^/]+)\//);
+        const milestoneMatch = normPath.match(/milestones\/([^/]+)\//);
         if (milestoneMatch) {
           const ok = await renderRoadmapCheckboxes(basePath, milestoneMatch[1]);
           if (ok) {
@@ -948,7 +950,7 @@ export async function repairStaleRenders(basePath: string): Promise<number> {
         }
       } else if (entry.reason.includes("in plan")) {
         // Plan checkbox mismatch — extract milestone + slice IDs from path
-        const pathMatch = entry.path.match(/milestones\/([^/]+)\/slices\/([^/]+)\//);
+        const pathMatch = normPath.match(/milestones\/([^/]+)\/slices\/([^/]+)\//);
         if (pathMatch) {
           const ok = await renderPlanCheckboxes(basePath, pathMatch[1], pathMatch[2]);
           if (ok) {
@@ -958,7 +960,7 @@ export async function repairStaleRenders(basePath: string): Promise<number> {
         }
       } else if (entry.reason.includes("SUMMARY.md missing") && entry.reason.match(/^T\d+/)) {
         // Missing task summary — extract IDs from path
-        const pathMatch = entry.path.match(/milestones\/([^/]+)\/slices\/([^/]+)\/tasks\//);
+        const pathMatch = normPath.match(/milestones\/([^/]+)\/slices\/([^/]+)\/tasks\//);
         const taskMatch = entry.reason.match(/^(T\d+)/);
         if (pathMatch && taskMatch) {
           const ok = await renderTaskSummary(basePath, pathMatch[1], pathMatch[2], taskMatch[1]);
@@ -969,7 +971,7 @@ export async function repairStaleRenders(basePath: string): Promise<number> {
         }
       } else if (entry.reason.includes("SUMMARY.md missing") && entry.reason.match(/^S\d+/)) {
         // Missing slice summary — extract IDs from path
-        const pathMatch = entry.path.match(/milestones\/([^/]+)\/slices\/([^/]+)\//);
+        const pathMatch = normPath.match(/milestones\/([^/]+)\/slices\/([^/]+)\//);
         if (pathMatch) {
           const ok = await renderSliceSummary(basePath, pathMatch[1], pathMatch[2]);
           if (ok) {
@@ -979,7 +981,7 @@ export async function repairStaleRenders(basePath: string): Promise<number> {
         }
       } else if (entry.reason.includes("UAT.md missing")) {
         // Missing slice UAT — renderSliceSummary handles both SUMMARY + UAT
-        const pathMatch = entry.path.match(/milestones\/([^/]+)\/slices\/([^/]+)\//);
+        const pathMatch = normPath.match(/milestones\/([^/]+)\/slices\/([^/]+)\//);
         if (pathMatch) {
           const ok = await renderSliceSummary(basePath, pathMatch[1], pathMatch[2]);
           if (ok) {

@@ -490,7 +490,7 @@ async function main(): Promise<void> {
       // The milestone code should be on main.
       assertTrue(existsSync(join(repo, "e2e.ts")), "#2151: e2e.ts merged to main");
       const content = readFileSync(join(repo, "e2e.ts"), "utf-8");
-      assertEq(content, "export const e2e = true;\n", "#2151: merged content is from milestone branch");
+      assertEq(content.replace(/\r\n/g, "\n"), "export const e2e = true;\n", "#2151: merged content is from milestone branch");
     }
 
     // ─── Test 12: Throw on unanchored code changes after empty commit (#1792) ─

@@ -1006,7 +1006,14 @@ export function mergeMilestoneToMain(
       .filter(s => s.status === "complete")
       .map(s => ({ id: s.id, title: s.title }));
   }
-  // When DB unavailable, completedSlices stays empty — commit message will omit slice details
+  // Fallback: parse roadmap content when DB is unavailable
+  if (completedSlices.length === 0 && roadmapContent) {
+    const sliceRe = /- \[x\] \*\*(\w+):\s*(.+?)\*\*/gi;
+    let m: RegExpExecArray | null;
+    while ((m = sliceRe.exec(roadmapContent)) !== null) {
+      completedSlices.push({ id: m[1], title: m[2] });
+    }
+  }
 
   // 3. chdir to original base
   const previousCwd = process.cwd();
@@ -1037,8 +1044,14 @@ export function mergeMilestoneToMain(
 
   // 6. Build rich commit message
   const dbMilestone = getMilestone(milestoneId);
-  const milestoneTitle =
-    (dbMilestone?.title ?? "").replace(/^M\d+:\s*/, "").trim() || milestoneId;
+  let milestoneTitle =
+    (dbMilestone?.title ?? "").replace(/^M\d+:\s*/, "").trim();
+  // Fallback: parse title from roadmap content header (e.g. "# M020: Backend foundation")
+  if (!milestoneTitle && roadmapContent) {
+    const titleMatch = roadmapContent.match(new RegExp(`^#\\s+${milestoneId}:\\s*(.+)`, "m"));
+    if (titleMatch) milestoneTitle = titleMatch[1].trim();
+  }
+  milestoneTitle = milestoneTitle || milestoneId;
   const subject = `feat(${milestoneId}): ${milestoneTitle}`;
   let body = "";
   if (completedSlices.length > 0) {

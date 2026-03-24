@@ -12,6 +12,7 @@
 import type { TaskIO, DerivedTaskNode, ReactiveExecutionState } from "./types.js";
 import { loadFile, parseTaskPlanIO } from "./files.js";
 import { isDbAvailable, getSliceTasks } from "./gsd-db.js";
+import { parsePlan } from "./parsers-legacy.js";
 import { resolveTasksDir, resolveTaskFiles } from "./paths.js";
 import { join } from "node:path";
 import { loadJsonFileOrNull, saveJsonFile } from "./json-persistence.js";
@@ -205,8 +206,17 @@ export async function loadSliceTaskIO(
   } catch { /* fall through */ }
 
   if (!taskEntries) {
-    // DB unavailable — cannot determine task graph
-    return [];
+    // File-based fallback: parse slice plan for task entries
+    const parsed = parsePlan(planContent);
+    if (parsed.tasks.length > 0) {
+      taskEntries = parsed.tasks.map(t => ({
+        id: t.id,
+        title: t.title,
+        done: t.done,
+      }));
+    } else {
+      return [];
+    }
   }
 
   const tDir = resolveTasksDir(basePath, mid, sid);

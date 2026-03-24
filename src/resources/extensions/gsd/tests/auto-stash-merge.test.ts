@@ -83,7 +83,7 @@ test("#2151 bug 1: auto-stash unblocks merge when unrelated files are dirty", ()
     const readmeContent = readFileSync(join(repo, "README.md"), "utf-8");
     assert.equal(readmeContent, "# modified locally\n", "stash popped — dirty file restored after merge");
   } finally {
-    rmSync(repo, { recursive: true, force: true });
+    rmSync(repo, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   }
 });
 
@@ -116,6 +116,6 @@ test("#2151 bug 2: nativeMergeSquash returns dirty filenames", async () => {
     );
   } finally {
     run("git checkout -- . 2>/dev/null || true", repo);
-    rmSync(repo, { recursive: true, force: true });
+    rmSync(repo, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   }
 });

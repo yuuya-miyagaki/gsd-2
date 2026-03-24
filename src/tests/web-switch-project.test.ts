@@ -5,7 +5,7 @@ import {
   existsSync, statSync,
 } from "node:fs";
 import { tmpdir, homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve, isAbsolute } from "node:path";
 
 // ---------------------------------------------------------------------------
 // Test the core validation + persistence logic used by /api/switch-root
@@ -162,7 +162,7 @@ describe("switch-root: path validation", () => {
     // Create a relative path that's valid from cwd
     const result = validateSwitchRoot(rootA);
     assert.ok(result.ok);
-    assert.ok(result.devRoot!.startsWith("/"), "Should be absolute path");
+    assert.ok(isAbsolute(result.devRoot!), "Should be absolute path");
   });
 });
 
