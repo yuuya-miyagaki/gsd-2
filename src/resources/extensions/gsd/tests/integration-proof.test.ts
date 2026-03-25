@@ -359,7 +359,7 @@ test("full lifecycle: migration through completion through doctor", async (t) =>
     // Verify roadmap checkbox toggled
     const roadmapPath = join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md");
     const roadmapAfter = readFileSync(roadmapPath, "utf-8");
-    assert.match(roadmapAfter, /\[x\]\s+\*\*S01:/, "S01 should be checked in roadmap");
+    assert.ok(roadmapAfter.includes("\u2705"), "S01 should be checked in roadmap (✅ emoji in table format)");
 
     // Verify slice status in DB
     const sliceRow = getSlice("M001", "S01");
@@ -627,13 +627,13 @@ test("undo/reset: undo task and reset slice revert DB + markdown", async (t) => 
 
     // Plan checkboxes should be unchecked
     const planAfterReset = readFileSync(planPath, "utf-8");
-    assert.match(planAfterReset, /\[ \]\s+\*\*T01:/, "T01 should be unchecked after reset");
-    assert.match(planAfterReset, /\[ \]\s+\*\*T02:/, "T02 should be unchecked after reset");
+    assert.ok(planAfterReset.includes("[ ] **T01:"), "T01 should be unchecked after reset");
+    assert.ok(planAfterReset.includes("[ ] **T02:"), "T02 should be unchecked after reset");
 
-    // Roadmap checkbox should be unchecked
+    // Roadmap should show unchecked (⬜ emoji in table format)
     const roadmapPath = join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md");
     const roadmapAfterReset = readFileSync(roadmapPath, "utf-8");
-    assert.match(roadmapAfterReset, /\[ \]\s+\*\*S01:/, "S01 should be unchecked in roadmap after reset");
+    assert.ok(roadmapAfterReset.includes("\u2B1C"), "S01 should be unchecked in roadmap after reset (⬜ emoji)");
 
     // Reset notification should be success
     assert.ok(
