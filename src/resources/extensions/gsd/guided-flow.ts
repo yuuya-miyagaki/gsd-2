@@ -1151,7 +1151,9 @@ export async function showSmartEntry(
   try {
     const { buildStateMarkdown } = await import("./doctor.js");
     await saveFile(resolveGsdRootFile(basePath, "STATE"), buildStateMarkdown(state));
-  } catch { /* non-fatal */ }
+  } catch (err) {
+    logWarning("guided", `STATE.md rebuild failed: ${(err as Error).message}`);
+  }
 
   if (!state.activeMilestone?.id) {
     // Guard: if a discuss session is already in flight, don't re-inject the prompt.
