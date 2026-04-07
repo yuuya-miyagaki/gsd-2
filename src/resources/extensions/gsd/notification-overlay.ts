@@ -28,6 +28,27 @@ function severityIcon(severity: NotifySeverity): string {
   }
 }
 
+/** Word-wrap plain text to fit within maxWidth columns. */
+function wrapText(text: string, maxWidth: number): string[] {
+  if (text.length <= maxWidth) return [text];
+  const words = text.split(/\s+/);
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    if (current.length === 0) {
+      current = word;
+    } else if (current.length + 1 + word.length <= maxWidth) {
+      current += " " + word;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  if (current.length > 0) lines.push(current);
+  // If a single word exceeds maxWidth, truncate it
+  return lines.map((l) => l.length > maxWidth ? l.slice(0, maxWidth - 1) + "…" : l);
+}
+
 function formatTimestamp(ts: string): string {
   try {
     const d = new Date(ts);
@@ -163,12 +184,6 @@ export class GSDNotificationOverlay {
     this.scrollOffset = Math.min(this.scrollOffset, maxScroll);
     const visibleContent = content.slice(this.scrollOffset, this.scrollOffset + visibleContentRows);
 
-    // Pad to consistent height so filter changes don't leave ghost artifacts
-    // (differential renderer can't clear old overlay positions)
-    while (visibleContent.length < maxVisibleRows) {
-      visibleContent.push("");
-    }
-
     const lines = this.wrapInBox(visibleContent, width);
 
     this.cachedWidth = width;
@@ -258,13 +273,21 @@ export class GSDNotificationOverlay {
       const time = th.fg("dim", formatTimestamp(entry.ts));
       const source = entry.source === "workflow-logger" ? th.fg("dim", " [engine]") : "";
 
-      // Measure actual prefix width to truncate message accurately
+      // Measure actual prefix width for wrapping
       const prefix = `${coloredIcon} ${time}${source}  `;
       const prefixWidth = visibleWidth(prefix);
       const msgMaxWidth = Math.max(10, contentWidth - prefixWidth);
-      const msg = truncateToWidth(entry.message, msgMaxWidth, "…");
 
-      lines.push(row(`${prefix}${msg}`));
+      // Wrap long messages onto continuation lines indented to align with message start
+      const msgLines = wrapText(entry.message, msgMaxWidth);
+      const indent = " ".repeat(prefixWidth);
+      for (let i = 0; i < msgLines.length; i++) {
+        if (i === 0) {
+          lines.push(row(`${prefix}${msgLines[i]}`));
+        } else {
+          lines.push(row(`${indent}${msgLines[i]}`));
+        }
+      }
     }
 
     return lines;
