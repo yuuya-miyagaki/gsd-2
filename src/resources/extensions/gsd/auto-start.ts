@@ -47,6 +47,10 @@ import {
   nativeGetCurrentBranch,
   nativeDetectMainBranch,
   nativeCheckoutBranch,
+  nativeBranchList,
+  nativeBranchListMerged,
+  nativeBranchDelete,
+  nativeWorktreeRemove,
 } from "./native-git-bridge.js";
 import { GitServiceImpl } from "./git-service.js";
 import {
@@ -56,6 +60,7 @@ import {
 } from "./worktree.js";
 import { getAutoWorktreePath, isInAutoWorktree } from "./auto-worktree.js";
 import { readResourceVersion, cleanStaleRuntimeUnits } from "./auto-worktree.js";
+import { worktreePath as getWorktreeDir, isInsideWorktreesDir } from "./worktree-manager.js";
 import { initMetrics } from "./metrics.js";
 import { initRoutingHistory } from "./routing-history.js";
 import { restoreHookState, resetHookState } from "./post-unit-hooks.js";
@@ -76,6 +81,7 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
+  rmSync,
   statSync,
   unlinkSync,
 } from "node:fs";
@@ -115,6 +121,123 @@ export async function openProjectDbIfPresent(basePath: string): Promise<void> {
   } catch (err) {
     logWarning("engine", `gsd-db: failed to open existing database: ${err instanceof Error ? err.message : String(err)}`);
   }
+}
+
+/**
+ * Audit for orphaned milestone branches at bootstrap.
+ *
+ * After a milestone completes, the teardown step (merge branch → main,
+ * delete branch, remove worktree) runs as a post-completion engine step.
+ * If the session ends between completion and teardown, the branch and
+ * worktree are orphaned — the DB says "complete" so auto-mode won't
+ * re-enter the milestone, and the teardown is never retried.
+ *
+ * This audit runs on every fresh bootstrap to catch that gap:
+ * 1. Lists all local `milestone/*` branches.
+ * 2. For each, checks if the milestone's DB status is "complete".
+ * 3. If the branch is already merged into main → deletes the branch
+ *    and cleans up any orphaned worktree directory (safe, no data loss).
+ * 4. If the branch is NOT merged → preserves it and warns the user
+ *    so they can merge manually (data safety first).
+ *
+ * Returns a summary of actions taken for the caller to surface via notify.
+ */
+export function auditOrphanedMilestoneBranches(
+  basePath: string,
+  isolationMode: "worktree" | "branch" | "none",
+): { recovered: string[]; warnings: string[] } {
+  const recovered: string[] = [];
+  const warnings: string[] = [];
+
+  // Skip in none mode — no milestone branches are created
+  if (isolationMode === "none") return { recovered, warnings };
+
+  // Skip if DB not available — can't determine completion status
+  if (!isDbAvailable()) return { recovered, warnings };
+
+  let milestoneBranches: string[];
+  try {
+    milestoneBranches = nativeBranchList(basePath, "milestone/*");
+  } catch {
+    // git branch list failed — skip audit
+    return { recovered, warnings };
+  }
+
+  if (milestoneBranches.length === 0) return { recovered, warnings };
+
+  // Detect main branch for merge-check
+  let mainBranch: string;
+  try {
+    mainBranch = nativeDetectMainBranch(basePath);
+  } catch {
+    mainBranch = "main";
+  }
+
+  // Get branches already merged into main
+  let mergedBranches: Set<string>;
+  try {
+    mergedBranches = new Set(nativeBranchListMerged(basePath, mainBranch, "milestone/*"));
+  } catch {
+    mergedBranches = new Set();
+  }
+
+  for (const branch of milestoneBranches) {
+    const milestoneId = branch.replace(/^milestone\//, "");
+    const milestone = getMilestone(milestoneId);
+
+    // Only audit completed milestones
+    if (!milestone || milestone.status !== "complete") continue;
+
+    const isMerged = mergedBranches.has(branch);
+
+    if (isMerged) {
+      // Branch is merged — safe to delete branch and clean up worktree dir
+      try {
+        nativeBranchDelete(basePath, branch, true);
+        recovered.push(`Deleted merged branch ${branch} for completed milestone ${milestoneId}.`);
+      } catch (err) {
+        warnings.push(`Failed to delete merged branch ${branch}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+
+      // Clean up orphaned worktree directory if it exists
+      const wtDir = getWorktreeDir(basePath, milestoneId);
+      if (existsSync(wtDir)) {
+        // Try git worktree remove first (handles registered worktrees)
+        try {
+          nativeWorktreeRemove(basePath, wtDir, true);
+        } catch (e) {
+          // Not a registered worktree — expected for orphaned dirs
+          logWarning("engine", `worktree remove failed (expected for orphaned dirs): ${e instanceof Error ? e.message : String(e)}`);
+        }
+
+        // If the directory still exists after git worktree remove (either it
+        // wasn't registered or the remove was a noop), fall back to direct
+        // filesystem removal — but only inside .gsd/worktrees/ for safety (#2365).
+        if (existsSync(wtDir)) {
+          if (isInsideWorktreesDir(basePath, wtDir)) {
+            try {
+              rmSync(wtDir, { recursive: true, force: true });
+              recovered.push(`Removed orphaned worktree directory for ${milestoneId}.`);
+            } catch (err2) {
+              warnings.push(`Failed to remove worktree directory for ${milestoneId}: ${err2 instanceof Error ? err2.message : String(err2)}`);
+            }
+          } else {
+            warnings.push(`Orphaned worktree directory for ${milestoneId} is outside .gsd/worktrees/ — skipping removal for safety.`);
+          }
+        } else {
+          recovered.push(`Removed orphaned worktree directory for ${milestoneId}.`);
+        }
+      }
+    } else {
+      // Branch is NOT merged — preserve for safety, warn the user
+      warnings.push(
+        `Branch ${branch} exists for completed milestone ${milestoneId} but is NOT merged into ${mainBranch}. ` +
+        `This may contain unmerged work. Merge manually or run \`/gsd health --fix\` to resolve.`,
+      );
+    }
+  }
+
+  return { recovered, warnings };
 }
 
 export async function bootstrapAutoSession(
@@ -299,6 +422,26 @@ export async function bootstrapAutoSession(
     // Open the project-root DB before deriveState so DB-backed state
     // derivation (queue-order, task status) works on a cold start (#2841).
     await openProjectDbIfPresent(base);
+
+    // ── Orphaned milestone branch audit ──
+    // Catches completed milestones whose teardown (merge + branch delete)
+    // was lost due to session ending between completion and teardown.
+    // Must run after DB open and before worktree entry.
+    try {
+      const auditResult = auditOrphanedMilestoneBranches(base, getIsolationMode());
+      for (const msg of auditResult.recovered) {
+        ctx.ui.notify(`Orphan audit: ${msg}`, "info");
+      }
+      for (const msg of auditResult.warnings) {
+        ctx.ui.notify(`Orphan audit: ${msg}`, "warning");
+      }
+      if (auditResult.recovered.length > 0) {
+        debugLog("orphan-audit", { recovered: auditResult.recovered, warnings: auditResult.warnings });
+      }
+    } catch (err) {
+      // Non-fatal — the audit is defensive, never block bootstrap
+      logWarning("bootstrap", `orphaned milestone branch audit failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
 
     let state = await deriveState(base);
 
