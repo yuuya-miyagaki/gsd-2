@@ -47,7 +47,7 @@ let pendingGateId: string | null = null;
 
 /**
  * Recognized gate question ID patterns.
- * These appear in both discuss-prepared.md (4-layer) and discuss.md (depth/requirements/roadmap).
+ * These appear in discuss.md (depth/requirements/roadmap).
  */
 const GATE_QUESTION_PATTERNS = [
   "layer1_scope_gate",
