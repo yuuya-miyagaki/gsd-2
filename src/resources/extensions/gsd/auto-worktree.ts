@@ -1137,6 +1137,7 @@ function copyPlanningArtifacts(srcBase: string, wtPath: string): void {
   const srcGsd = join(srcBase, ".gsd");
   const dstGsd = join(wtPath, ".gsd");
   if (!existsSync(srcGsd)) return;
+  if (isSamePath(srcGsd, dstGsd)) return;
 
   // Copy milestones/ directory (planning files, roadmaps, plans, research)
   safeCopyRecursive(join(srcGsd, "milestones"), join(dstGsd, "milestones"), {
@@ -2064,4 +2065,3 @@ export function mergeMilestoneToMain(
 
   return { commitMessage, pushed, prCreated, codeFilesChanged };
 }
-
