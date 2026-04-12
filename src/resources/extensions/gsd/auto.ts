@@ -165,6 +165,7 @@ import {
   reconcileMergeState,
 } from "./auto-recovery.js";
 import { resolveDispatch, DISPATCH_RULES } from "./auto-dispatch.js";
+import { getErrorMessage } from "./error-utils.js";
 import { initRegistry, convertDispatchRules } from "./rule-registry.js";
 import { emitJournalEvent as _emitJournalEvent, type JournalEntry } from "./journal.js";
 import {
@@ -270,6 +271,53 @@ function restoreProjectRootEnv(): void {
   s.previousProjectRootEnv = null;
   s.hadProjectRootEnv = false;
   s.projectRootEnvCaptured = false;
+}
+
+function captureMilestoneLockEnv(milestoneId: string | null): void {
+  if (!s.milestoneLockEnvCaptured) {
+    s.hadMilestoneLockEnv = Object.prototype.hasOwnProperty.call(process.env, "GSD_MILESTONE_LOCK");
+    s.previousMilestoneLockEnv = process.env.GSD_MILESTONE_LOCK ?? null;
+    s.milestoneLockEnvCaptured = true;
+  }
+
+  if (milestoneId) {
+    process.env.GSD_MILESTONE_LOCK = milestoneId;
+  } else {
+    delete process.env.GSD_MILESTONE_LOCK;
+  }
+}
+
+function restoreMilestoneLockEnv(): void {
+  if (!s.milestoneLockEnvCaptured) return;
+
+  if (s.hadMilestoneLockEnv && s.previousMilestoneLockEnv !== null) {
+    process.env.GSD_MILESTONE_LOCK = s.previousMilestoneLockEnv;
+  } else {
+    delete process.env.GSD_MILESTONE_LOCK;
+  }
+
+  s.previousMilestoneLockEnv = null;
+  s.hadMilestoneLockEnv = false;
+  s.milestoneLockEnvCaptured = false;
+}
+
+export function startAutoDetached(
+  ctx: ExtensionCommandContext,
+  pi: ExtensionAPI,
+  base: string,
+  verboseMode: boolean,
+  options?: {
+    step?: boolean;
+    interrupted?: InterruptedSessionAssessment;
+    milestoneLock?: string | null;
+  },
+): void {
+  void startAuto(ctx, pi, base, verboseMode, options).catch((err) => {
+    const message = getErrorMessage(err);
+    ctx.ui.notify(`Auto-start failed: ${message}`, "error");
+    logWarning("engine", `auto start error: ${message}`, { file: "auto.ts" });
+    debugLog("auto-start-failed", { error: message });
+  });
 }
 
 export function shouldUseWorktreeIsolation(): boolean {
@@ -576,6 +624,7 @@ function handleLostSessionLock(
   s.paused = false;
   clearUnitTimeout();
   restoreProjectRootEnv();
+  restoreMilestoneLockEnv();
   deregisterSigtermHandler();
   clearCmuxSidebar(loadEffectiveGSDPreferences()?.preferences);
   const base = lockBase();
@@ -612,6 +661,7 @@ function cleanupAfterLoopExit(ctx: ExtensionContext): void {
   s.active = false;
   clearUnitTimeout();
   restoreProjectRootEnv();
+  restoreMilestoneLockEnv();
 
   // Clear crash lock and release session lock so the next `/gsd next` does
   // not see a stale lock with the current PID and treat it as a "remote"
@@ -882,6 +932,7 @@ export async function stopAuto(
     ctx?.ui.setWidget("gsd-progress", undefined);
     ctx?.ui.setFooter(undefined);
     restoreProjectRootEnv();
+    restoreMilestoneLockEnv();
 
     // Reset all session state in one call
     s.reset();
@@ -935,6 +986,7 @@ export async function pauseAuto(
       activeEngineId: s.activeEngineId,
       activeRunDir: s.activeRunDir,
       autoStartTime: s.autoStartTime,
+      milestoneLock: s.sessionMilestoneLock ?? undefined,
     };
     const runtimeDir = join(gsdRoot(s.originalBasePath || s.basePath), "runtime");
     mkdirSync(runtimeDir, { recursive: true });
@@ -973,6 +1025,7 @@ export async function pauseAuto(
   s.active = false;
   s.paused = true;
   restoreProjectRootEnv();
+  restoreMilestoneLockEnv();
   s.pendingVerificationRetry = null;
   s.verificationRetryCount.clear();
   ctx?.ui.setStatus("gsd-auto", "paused");
@@ -1156,6 +1209,7 @@ export async function startAuto(
   options?: {
     step?: boolean;
     interrupted?: InterruptedSessionAssessment;
+    milestoneLock?: string | null;
   },
 ): Promise<void> {
   if (s.active) {
@@ -1165,6 +1219,12 @@ export async function startAuto(
 
   const requestedStepMode = options?.step ?? false;
   const interruptedAssessment = options?.interrupted ?? null;
+  if (options?.milestoneLock !== undefined) {
+    s.sessionMilestoneLock = options.milestoneLock ?? null;
+  }
+  if (s.sessionMilestoneLock) {
+    captureMilestoneLockEnv(s.sessionMilestoneLock);
+  }
 
   // Escape stale worktree cwd from a previous milestone (#608).
   base = escapeStaleWorktree(base);
@@ -1196,6 +1256,7 @@ export async function startAuto(
         s.originalBasePath = meta.originalBasePath || base;
         s.stepMode = meta.stepMode ?? requestedStepMode;
         s.autoStartTime = meta.autoStartTime || Date.now();
+        s.sessionMilestoneLock = meta.milestoneLock ?? null;
         s.paused = true;
         try { unlinkSync(pausedPath); } catch (e) { logWarning("session", `pause file cleanup failed: ${e instanceof Error ? e.message : String(e)}`, { file: "auto.ts" }); }
         ctx.ui.notify(
@@ -1230,6 +1291,7 @@ export async function startAuto(
             s.pausedUnitType = meta.unitType ?? null;
             s.pausedUnitId = meta.unitId ?? null;
             s.autoStartTime = meta.autoStartTime || Date.now();
+            s.sessionMilestoneLock = meta.milestoneLock ?? null;
             s.paused = true;
             try { unlinkSync(pausedPath); } catch (e) { logWarning("session", `pause file cleanup failed: ${e instanceof Error ? e.message : String(e)}`, { file: "auto.ts" }); }
             ctx.ui.notify(
@@ -1247,6 +1309,10 @@ export async function startAuto(
     }
     // Guard against zero/missing autoStartTime after resume (#3585)
     if (!s.autoStartTime || s.autoStartTime <= 0) s.autoStartTime = Date.now();
+  }
+
+  if (s.sessionMilestoneLock) {
+    captureMilestoneLockEnv(s.sessionMilestoneLock);
   }
 
   if (!s.paused) {
