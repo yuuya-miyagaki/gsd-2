@@ -83,7 +83,11 @@ import { join } from "node:path";
 import { sep as pathSep } from "node:path";
 
 import { resolveProjectRootDbPath } from "./bootstrap/dynamic-tools.js";
-import { resolveDefaultSessionModel, resolveDynamicRoutingConfig } from "./preferences-models.js";
+import {
+  isCustomProvider,
+  resolveDefaultSessionModel,
+  resolveDynamicRoutingConfig,
+} from "./preferences-models.js";
 import type { WorktreeResolver } from "./worktree-resolver.js";
 import { getSessionModelOverride } from "./session-model-override.js";
 
@@ -274,8 +278,18 @@ export async function bootstrapAutoSession(
   //
   // This preserves #3517 defaults while honoring explicit runtime model
   // selection for subsequent /gsd runs in the same session.
+  //
+  // Exception (#4122): when the session provider is a custom provider declared
+  // in ~/.gsd/agent/models.json (Ollama, vLLM, OpenAI-compatible proxy, etc.),
+  // PREFERENCES.md is skipped entirely. PREFERENCES.md cannot reference custom
+  // providers, so honoring it would silently reroute auto-mode to a built-in
+  // provider the user is not logged into and surface as "Not logged in · Please
+  // run /login" before pausing and resetting to claude-code/claude-sonnet-4-6.
   const manualSessionOverride = getSessionModelOverride(ctx.sessionManager.getSessionId());
-  const preferredModel = resolveDefaultSessionModel(ctx.model?.provider);
+  const sessionProviderIsCustom = isCustomProvider(ctx.model?.provider);
+  const preferredModel = sessionProviderIsCustom
+    ? null
+    : resolveDefaultSessionModel(ctx.model?.provider);
   // Validate the preferred model against the live registry + provider auth so
   // an unconfigured PREFERENCES.md entry (no API key / OAuth) can't become the
   // start-model snapshot. Without this, every subsequent unit would try to
