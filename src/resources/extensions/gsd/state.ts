@@ -710,7 +710,7 @@ async function reconcileSliceTasks(
     const summaryPath = resolveTaskFile(basePath, milestoneId, sliceId, t.id, "SUMMARY");
     if (summaryPath && existsSync(summaryPath)) {
       try {
-        updateTaskStatus(milestoneId, sliceId, t.id, "complete");
+        updateTaskStatus(milestoneId, sliceId, t.id, "complete", new Date().toISOString());
         logWarning("reconcile", `task ${milestoneId}/${sliceId}/${t.id} status reconciled from "${t.status}" to "complete" (#2514)`, { mid: milestoneId, sid: sliceId, tid: t.id });
         reconciled = true;
       } catch (e) {
