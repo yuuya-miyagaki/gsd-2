@@ -497,6 +497,16 @@ test("provider-error-resume.ts calls resetTransientRetryState before startAuto",
     resetIdx !== -1 && startIdx !== -1 && resetIdx < startIdx,
     "resetTransientRetryState() must be called before deps.startAuto()",
   );
+  // Session timeout counter must also be reset before startAuto
+  assert.ok(
+    src.includes("resetSessionTimeoutState"),
+    "provider-error-resume.ts must import and call resetSessionTimeoutState",
+  );
+  const sessionResetIdx = src.indexOf("resetSessionTimeoutState()");
+  assert.ok(
+    sessionResetIdx !== -1 && startIdx !== -1 && sessionResetIdx < startIdx,
+    "resetSessionTimeoutState() must be called before deps.startAuto()",
+  );
 });
 
 // ── Fix 2: Session creation timeout treated as transient in phases.ts ───────
