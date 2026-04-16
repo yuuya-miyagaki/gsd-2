@@ -23,7 +23,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { extname, join } from "node:path";
+import { extname, join, resolve, sep as pathSep } from "node:path";
 import { createHash } from "node:crypto";
 import { parse as parseYaml } from "yaml";
 
@@ -79,6 +79,36 @@ export function globalInstallDir(): string {
 
 export function projectInstallDir(basePath: string): string {
   return join(basePath, ".gsd", "workflows");
+}
+
+/**
+ * Reject plugin names that could escape the workflows directory.
+ * Allows a-z, A-Z, 0-9, dot, underscore, hyphen — no separators, no dot-segments.
+ */
+function assertSafePluginName(name: string): void {
+  if (!name || name === "." || name === "..") {
+    throw new Error(`Invalid plugin name: "${name}"`);
+  }
+  if (!/^[a-zA-Z0-9._-]+$/.test(name)) {
+    throw new Error(
+      `Invalid plugin name "${name}". Allowed characters: letters, digits, dot, underscore, hyphen.`,
+    );
+  }
+}
+
+/**
+ * Resolve `child` inside `dir` and refuse any result that escapes `dir`.
+ */
+function safeResolveInDir(dir: string, child: string): string {
+  const resolvedDir = resolve(dir);
+  const resolvedPath = resolve(resolvedDir, child);
+  if (
+    resolvedPath !== resolvedDir &&
+    !resolvedPath.startsWith(resolvedDir + pathSep)
+  ) {
+    throw new Error(`Refusing to operate outside ${dir}: ${child}`);
+  }
+  return resolvedPath;
 }
 
 // ─── Source URL resolution ───────────────────────────────────────────────
@@ -172,18 +202,44 @@ export async function fetchWorkflowSource(url: string): Promise<FetchedContent> 
 
     const content = new TextDecoder().decode(buf);
 
-    // Infer the extension from the URL path.
-    const pathname = new URL(url).pathname;
+    // Prefer the final response URL after redirects (e.g., gist /raw → /raw/<sha>/file.ext).
+    const finalUrl = typeof res.url === "string" && res.url ? res.url : url;
+    let pathname: string;
+    try {
+      pathname = new URL(finalUrl).pathname;
+    } catch {
+      pathname = new URL(url).pathname;
+    }
+    let basename = pathname.slice(pathname.lastIndexOf("/") + 1);
+    let rawExt = extname(basename).toLowerCase();
+
     let ext: ".yaml" | ".yml" | ".md";
-    const basename = pathname.slice(pathname.lastIndexOf("/") + 1);
-    const rawExt = extname(basename).toLowerCase();
     if (rawExt === ".yaml" || rawExt === ".yml" || rawExt === ".md") {
       ext = rawExt;
     } else {
-      throw new Error(
-        `Unsupported file type: "${rawExt || "(none)"}". ` +
-        `Workflow plugins must be .yaml, .yml, or .md.`,
-      );
+      // Fallback: sniff content. Gist /raw and similar URLs have no extension.
+      if (/<template_meta>[\s\S]*?<\/template_meta>/.test(content)) {
+        ext = ".md";
+      } else {
+        let parsed: unknown;
+        try {
+          parsed = parseYaml(content);
+        } catch {
+          parsed = undefined;
+        }
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          ext = ".yaml";
+        } else {
+          throw new Error(
+            `Cannot determine workflow type from ${url}. ` +
+            `Expected .yaml/.yml/.md URL, a markdown file with <template_meta>, ` +
+            `or a YAML document.`,
+          );
+        }
+      }
+      // Synthesize a filename so downstream sanitizers have something to chew on.
+      if (!basename) basename = "workflow";
+      basename = `${basename}${ext}`;
     }
 
     const filename = basename;
@@ -300,9 +356,10 @@ export function installPlugin(
   fetched: FetchedContent,
   name: string,
 ): InstallResult {
+  assertSafePluginName(name);
   mkdirSync(target.dir, { recursive: true });
   const filename = `${name}${fetched.ext}`;
-  const path = join(target.dir, filename);
+  const path = safeResolveInDir(target.dir, filename);
   writeFileSync(path, fetched.content, "utf-8");
 
   const prov = readProvenance(target.dir);
@@ -328,11 +385,15 @@ export interface UninstallResult {
  * Checks global dir first, then project (same order as install default).
  */
 export function uninstallPlugin(basePath: string, name: string): UninstallResult {
+  assertSafePluginName(name);
   for (const dir of [globalInstallDir(), projectInstallDir(basePath)]) {
     const prov = readProvenance(dir);
     const entry = prov[name];
     if (entry) {
-      const path = join(dir, entry.filename);
+      // Re-validate the filename recorded in provenance: a malicious provenance
+      // file must not trick us into deleting outside `dir`.
+      assertSafePluginName(entry.filename.replace(/\.(yaml|yml|md)$/i, ""));
+      const path = safeResolveInDir(dir, entry.filename);
       if (existsSync(path)) unlinkSync(path);
       delete prov[name];
       writeProvenance(dir, prov);
@@ -341,7 +402,7 @@ export function uninstallPlugin(basePath: string, name: string): UninstallResult
 
     // No provenance, but file might still exist.
     for (const ext of [".yaml", ".yml", ".md"]) {
-      const candidate = join(dir, `${name}${ext}`);
+      const candidate = safeResolveInDir(dir, `${name}${ext}`);
       if (existsSync(candidate) && statSync(candidate).isFile()) {
         unlinkSync(candidate);
         return { removed: true, path: candidate, warnedNotInProvenance: true };

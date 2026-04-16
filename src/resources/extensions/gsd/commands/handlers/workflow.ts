@@ -127,6 +127,23 @@ export function parseWorkflowRunArgs(args: string): { defName: string; overrides
 }
 
 /**
+ * Parse every token as an optional `k=v` override. Use when the workflow name
+ * is already known (e.g., direct `/gsd workflow <name> ...` dispatch) so the
+ * first token isn't eaten as a def name.
+ */
+export function parseWorkflowOverridesOnly(args: string): Record<string, string> {
+  const parts = splitWorkflowRunArgs(args);
+  const overrides: Record<string, string> = {};
+  for (const part of parts) {
+    const eqIdx = part.indexOf("=");
+    if (eqIdx > 0) {
+      overrides[part.slice(0, eqIdx)] = part.slice(eqIdx + 1);
+    }
+  }
+  return overrides;
+}
+
+/**
  * Dispatch a resolved plugin according to its declared mode.
  */
 function dispatchPluginByMode(
@@ -143,7 +160,7 @@ function dispatchPluginByMode(
     }
 
     case "yaml-step": {
-      const { overrides } = parseWorkflowRunArgs(args);
+      const overrides = parseWorkflowOverridesOnly(args);
       try {
         const base = projectRoot();
         const runDir = createRun(base, plugin.name, Object.keys(overrides).length > 0 ? overrides : undefined);
