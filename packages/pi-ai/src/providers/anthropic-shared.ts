@@ -155,7 +155,11 @@ export function supportsAdaptiveThinking(modelId: string): boolean {
 		modelId.includes("opus-4-7") ||
 		modelId.includes("opus-4.7") ||
 		modelId.includes("sonnet-4-6") ||
-		modelId.includes("sonnet-4.6")
+		modelId.includes("sonnet-4.6") ||
+		modelId.includes("sonnet-4-7") ||
+		modelId.includes("sonnet-4.7") ||
+		modelId.includes("haiku-4-5") ||
+		modelId.includes("haiku-4.5")
 	);
 }
 

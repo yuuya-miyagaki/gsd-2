@@ -690,6 +690,10 @@ function modelSupportsAdaptiveThinking(modelId: string): boolean {
 		|| modelId.includes("opus-4.7")
 		|| modelId.includes("sonnet-4-6")
 		|| modelId.includes("sonnet-4.6")
+		|| modelId.includes("sonnet-4-7")
+		|| modelId.includes("sonnet-4.7")
+		|| modelId.includes("haiku-4-5")
+		|| modelId.includes("haiku-4.5")
 	);
 }
 
@@ -747,10 +751,21 @@ export function buildSdkOptions(
 		"Bash(pwd)",
 		...(mcpServers ? Object.keys(mcpServers).map((serverName) => `mcp__${serverName}__*`) : []),
 	];
+	const supportsAdaptive = modelSupportsAdaptiveThinking(modelId);
 	const effort =
-		reasoning && modelSupportsAdaptiveThinking(modelId)
+		reasoning && supportsAdaptive
 			? mapThinkingLevelToAnthropicEffort(reasoning, modelId)
 			: undefined;
+
+	// Bug B: SDK requires thinking:{type:"adaptive"} alongside effort for adaptive thinking to activate.
+	// Bug C: SDK requires thinking:{type:"disabled"} to actually stop adaptive thinking when reasoning is off;
+	//        omitting the field leaves the SDK in its adaptive default (or persisted session state).
+	const thinkingConfig = supportsAdaptive
+		? effort
+			? { thinking: { type: "adaptive" } }
+			: { thinking: { type: "disabled" } }
+		: undefined;
+
 	return {
 		pathToClaudeCodeExecutable: getClaudePath(),
 		model: modelId,
@@ -765,6 +780,7 @@ export function buildSdkOptions(
 		...(allowedTools.length > 0 ? { allowedTools } : {}),
 		...(mcpServers ? { mcpServers } : {}),
 		betas: (modelId.includes("sonnet") || modelId.includes("opus-4-7") || modelId.includes("opus-4.7")) ? ["context-1m-2025-08-07"] : [],
+		...(thinkingConfig ?? {}),
 		...(effort ? { effort } : {}),
 		...sdkExtraOptions,
 	};

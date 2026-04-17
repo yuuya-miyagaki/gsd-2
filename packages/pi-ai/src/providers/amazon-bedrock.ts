@@ -383,21 +383,29 @@ function handleContentBlockStop(
 }
 
 /**
- * Check if the model supports adaptive thinking (Opus 4.6 and Sonnet 4.6).
+ * Check if the model supports adaptive thinking (Opus 4.6/4.7, Sonnet 4.6/4.7, Haiku 4.5).
+ * @internal exported for testing only
  */
-function supportsAdaptiveThinking(modelId: string): boolean {
+export function supportsAdaptiveThinking(modelId: string): boolean {
 	return (
 		modelId.includes("opus-4-6") ||
 		modelId.includes("opus-4.6") ||
+		modelId.includes("opus-4-7") ||
+		modelId.includes("opus-4.7") ||
 		modelId.includes("sonnet-4-6") ||
-		modelId.includes("sonnet-4.6")
+		modelId.includes("sonnet-4.6") ||
+		modelId.includes("sonnet-4-7") ||
+		modelId.includes("sonnet-4.7") ||
+		modelId.includes("haiku-4-5") ||
+		modelId.includes("haiku-4.5")
 	);
 }
 
-function mapThinkingLevelToEffort(
+/** @internal exported for testing only */
+export function mapThinkingLevelToEffort(
 	level: SimpleStreamOptions["reasoning"],
 	modelId: string,
-): "low" | "medium" | "high" | "max" {
+): "low" | "medium" | "high" | "xhigh" | "max" {
 	switch (level) {
 		case "minimal":
 		case "low":
@@ -407,8 +415,9 @@ function mapThinkingLevelToEffort(
 		case "high":
 			return "high";
 		case "xhigh":
-			return modelId.includes("opus-4-6") || modelId.includes("opus-4.6")
-				|| modelId.includes("opus-4-7") || modelId.includes("opus-4.7") ? "max" : "high";
+			if (modelId.includes("opus-4-7") || modelId.includes("opus-4.7")) return "xhigh";
+			if (modelId.includes("opus-4-6") || modelId.includes("opus-4.6")) return "max";
+			return "high";
 		default:
 			return "high";
 	}
@@ -689,7 +698,8 @@ function mapStopReason(reason: string | undefined): StopReason {
 	}
 }
 
-function buildAdditionalModelRequestFields(
+/** @internal exported for testing only */
+export function buildAdditionalModelRequestFields(
 	model: Model<"bedrock-converse-stream">,
 	options: BedrockOptions,
 ): Record<string, any> | undefined {
