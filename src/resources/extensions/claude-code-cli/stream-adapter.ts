@@ -31,6 +31,7 @@ import type {
 	SDKUserMessage,
 } from "./sdk-types.js";
 
+/** A single content block returned by an external (SDK-executed) tool call. */
 export interface ExternalToolResultContentBlock {
 	type: string;
 	text?: string;
@@ -38,25 +39,30 @@ export interface ExternalToolResultContentBlock {
 	mimeType?: string;
 }
 
+/** The full result payload returned by an external tool, including content blocks and error status. */
 export interface ExternalToolResultPayload {
 	content: ExternalToolResultContentBlock[];
 	details?: Record<string, unknown>;
 	isError: boolean;
 }
 
+/** A `ToolCall` block augmented with the external result attached by the SDK synthetic user message. */
 type ToolCallWithExternalResult = ToolCall & {
 	externalResult?: ExternalToolResultPayload;
 };
 
+/** `SimpleStreamOptions` extended with an optional extension UI context for elicitation dialogs. */
 interface ClaudeCodeStreamOptions extends SimpleStreamOptions {
 	extensionUIContext?: ExtensionUIContext;
 }
 
+/** A single selectable option within an SDK elicitation schema field. */
 interface SdkElicitationRequestOption {
 	const?: string;
 	title?: string;
 }
 
+/** JSON-Schema-like descriptor for a single field within an SDK elicitation request schema. */
 interface SdkElicitationFieldSchema {
 	type?: string;
 	title?: string;
@@ -69,6 +75,7 @@ interface SdkElicitationFieldSchema {
 	};
 }
 
+/** The full elicitation request object received from an MCP server via the Claude Agent SDK. */
 interface SdkElicitationRequest {
 	serverName: string;
 	message: string;
@@ -80,15 +87,18 @@ interface SdkElicitationRequest {
 	};
 }
 
+/** The result returned by an elicitation handler back to the Claude Agent SDK. */
 interface SdkElicitationResult {
 	action: "accept" | "decline" | "cancel";
 	content?: Record<string, string | string[]>;
 }
 
+/** A TUI `Question` extended with an optional note-field ID for "None of the above" free-text capture. */
 interface ParsedElicitationQuestion extends Question {
 	noteFieldId?: string;
 }
 
+/** Descriptor for a single free-text input field parsed from an SDK elicitation form schema. */
 interface ParsedTextInputField {
 	id: string;
 	title: string;
@@ -97,6 +107,7 @@ interface ParsedTextInputField {
 	secure: boolean;
 }
 
+/** A base64-encoded image block in the format accepted by the Claude Agent SDK input message. */
 interface SDKInputImageBlock {
 	type: "image";
 	source: {
@@ -106,13 +117,16 @@ interface SDKInputImageBlock {
 	};
 }
 
+/** A plain-text block in the format accepted by the Claude Agent SDK input message. */
 interface SDKInputTextBlock {
 	type: "text";
 	text: string;
 }
 
+/** Union of content block types that may appear in a Claude Agent SDK user input message. */
 type SDKInputUserContentBlock = SDKInputImageBlock | SDKInputTextBlock;
 
+/** A synthetic user message in the Claude Agent SDK's async-iterable prompt format, used when images are present. */
 interface SDKInputUserMessage {
 	type: "user";
 	message: {
@@ -122,7 +136,9 @@ interface SDKInputUserMessage {
 	parent_tool_use_id: null;
 }
 
+/** Label used for the free-text fallback option in single-choice elicitation questions. */
 const OTHER_OPTION_LABEL = "None of the above";
+/** Regex pattern that identifies field names and descriptions that should be treated as sensitive/secure inputs. */
 const SENSITIVE_FIELD_PATTERN = /(password|passphrase|secret|token|api[_\s-]*key|private[_\s-]*key|credential)/i;
 
 // ---------------------------------------------------------------------------
@@ -144,6 +160,7 @@ function createAssistantStream(): AssistantMessageEventStream {
 	) as AssistantMessageEventStream;
 }
 
+/** Extract a human-readable error string from an SDK result message. */
 export function getResultErrorMessage(result: SDKResultMessage): string {
 	if ("errors" in result && Array.isArray(result.errors) && result.errors.length > 0) {
 		return result.errors.join("; ");
@@ -160,12 +177,15 @@ export function getResultErrorMessage(result: SDKResultMessage): string {
 // Claude binary resolution
 // ---------------------------------------------------------------------------
 
+/** Cached result of the `which`/`where claude` lookup so the shell is only spawned once per process. */
 let cachedClaudePath: string | null = null;
 
+/** Return the shell command used to locate the `claude` binary on the given platform. */
 export function getClaudeLookupCommand(platform: NodeJS.Platform = process.platform): string {
 	return platform === "win32" ? "where claude" : "which claude";
 }
 
+/** Extract the first line of `which`/`where` output as the resolved binary path. */
 export function parseClaudeLookupOutput(output: Buffer | string): string {
 	return output
 		.toString()
@@ -248,6 +268,7 @@ export function buildPromptFromContext(context: Context): string {
 	return parts.join("\n\n");
 }
 
+/** Strip the `data:<mime>;base64,` prefix from a data URI, returning only the raw base64 payload. */
 function stripDataUriPrefix(value: string): string {
 	const commaIndex = value.indexOf(",");
 	if (value.startsWith("data:") && commaIndex !== -1) {
@@ -256,11 +277,13 @@ function stripDataUriPrefix(value: string): string {
 	return value;
 }
 
+/** Extract the MIME type from a data URI string, or return `null` if the value is not a valid data URI. */
 function inferMimeTypeFromDataUri(value: string): string | null {
 	const match = /^data:([^;,]+);base64,/.exec(value);
 	return match?.[1] ?? null;
 }
 
+/** Collect all base64 image blocks from user messages in the context for inclusion in the SDK prompt. */
 export function extractImageBlocksFromContext(context: Context): SDKInputImageBlock[] {
 	const imageBlocks: SDKInputImageBlock[] = [];
 
@@ -291,6 +314,7 @@ export function extractImageBlocksFromContext(context: Context): SDKInputImageBl
 	return imageBlocks;
 }
 
+/** Build the SDK query prompt, wrapping image blocks into an async iterable user message when present. */
 export function buildSdkQueryPrompt(
 	context: Context,
 	textPrompt: string = buildPromptFromContext(context),
@@ -320,6 +344,7 @@ export function buildSdkQueryPrompt(
 // Error helper
 // ---------------------------------------------------------------------------
 
+/** Build a minimal error `AssistantMessage` with the given model ID and error text. */
 function makeErrorMessage(model: string, errorMsg: string): AssistantMessage {
 	return {
 		role: "assistant",
@@ -348,6 +373,7 @@ export function makeStreamExhaustedErrorMessage(model: string, lastTextContent: 
 	return message;
 }
 
+/** Extract the string labels from an array of SDK elicitation option objects, filtering out blank entries. */
 function readElicitationChoices(options: SdkElicitationRequestOption[] | undefined): string[] {
 	if (!Array.isArray(options)) return [];
 	return options
@@ -355,6 +381,7 @@ function readElicitationChoices(options: SdkElicitationRequestOption[] | undefin
 		.filter((option): option is string => option.length > 0);
 }
 
+/** Parse an SDK elicitation request into structured multiple-choice questions, or null if the schema is unsupported. */
 export function parseAskUserQuestionsElicitation(
 	request: Pick<SdkElicitationRequest, "mode" | "requestedSchema">,
 ): ParsedElicitationQuestion[] | null {
@@ -408,6 +435,7 @@ export function parseAskUserQuestionsElicitation(
 	return questions.length > 0 ? questions : null;
 }
 
+/** Return true if the elicitation field should be treated as sensitive and rendered as a secure/password input. */
 function isSecureElicitationField(
 	requestMessage: string,
 	fieldId: string,
@@ -431,6 +459,7 @@ function isSecureElicitationField(
 	return SENSITIVE_FIELD_PATTERN.test(haystack);
 }
 
+/** Parse an SDK elicitation request into free-text input field descriptors, or null if unsupported. */
 export function parseTextInputElicitation(
 	request: Pick<SdkElicitationRequest, "message" | "mode" | "requestedSchema">,
 ): ParsedTextInputField[] | null {
@@ -469,6 +498,7 @@ export function parseTextInputElicitation(
 	return fields.length > 0 ? fields : null;
 }
 
+/** Convert a TUI interview round result into the SDK elicitation content map. */
 export function roundResultToElicitationContent(
 	questions: ParsedElicitationQuestion[],
 	result: RoundResult,
@@ -495,6 +525,7 @@ export function roundResultToElicitationContent(
 	return content;
 }
 
+/** Build the dialog title string for a multiple-choice elicitation question, combining server name, header, and question text. */
 function buildElicitationPromptTitle(request: SdkElicitationRequest, question: ParsedElicitationQuestion): string {
 	const parts = [
 		request.serverName ? `[${request.serverName}]` : "",
@@ -504,6 +535,7 @@ function buildElicitationPromptTitle(request: SdkElicitationRequest, question: P
 	return parts.join("\n\n");
 }
 
+/** Drive each multiple-choice elicitation question through the extension UI's `select` dialog, collecting answers into an SDK result. */
 async function promptElicitationWithDialogs(
 	request: SdkElicitationRequest,
 	questions: ParsedElicitationQuestion[],
@@ -550,6 +582,7 @@ async function promptElicitationWithDialogs(
 	return { action: "accept", content };
 }
 
+/** Build the dialog title string for a free-text input field, combining server name, field title, and description. */
 function buildTextInputPromptTitle(request: SdkElicitationRequest, field: ParsedTextInputField): string {
 	const parts = [
 		request.serverName ? `[${request.serverName}]` : "",
@@ -559,6 +592,7 @@ function buildTextInputPromptTitle(request: SdkElicitationRequest, field: Parsed
 	return parts.join("\n\n");
 }
 
+/** Derive a placeholder hint for a free-text input field from its description, falling back to "Required" or "Leave empty to skip". */
 function buildTextInputPlaceholder(field: ParsedTextInputField): string | undefined {
 	const desc = field.description.trim();
 	if (!desc) return field.required ? "Required" : "Leave empty to skip";
@@ -573,6 +607,7 @@ function buildTextInputPlaceholder(field: ParsedTextInputField): string | undefi
 	return hint.length > 0 ? hint : field.required ? "Required" : "Leave empty to skip";
 }
 
+/** Collect each free-text input field via the extension UI's `input` dialog, returning the filled SDK elicitation result. */
 async function promptTextInputElicitation(
 	request: SdkElicitationRequest,
 	fields: ParsedTextInputField[],
@@ -596,6 +631,7 @@ async function promptTextInputElicitation(
 	return { action: "accept", content };
 }
 
+/** Create an SDK elicitation handler that routes requests through the extension UI dialogs, or undefined if no UI is available. */
 export function createClaudeCodeElicitationHandler(
 	ui: ExtensionUIContext | undefined,
 ): ((request: SdkElicitationRequest, options: { signal: AbortSignal }) => Promise<SdkElicitationResult>) | undefined {
@@ -682,6 +718,7 @@ export async function resolveClaudePermissionMode(
 // NOTE: These helpers intentionally mirror @gsd/pi-ai anthropic-shared
 // behavior so this extension remains typecheck-stable even when the published
 // @gsd/pi-ai barrel lags behind monorepo source exports.
+/** Return true for model IDs that support the adaptive thinking API (Opus 4.6/4.7, Sonnet 4.6/4.7, Haiku 4.5). */
 function modelSupportsAdaptiveThinking(modelId: string): boolean {
 	return (
 		modelId.includes("opus-4-6")
@@ -690,9 +727,14 @@ function modelSupportsAdaptiveThinking(modelId: string): boolean {
 		|| modelId.includes("opus-4.7")
 		|| modelId.includes("sonnet-4-6")
 		|| modelId.includes("sonnet-4.6")
+		|| modelId.includes("sonnet-4-7")
+		|| modelId.includes("sonnet-4.7")
+		|| modelId.includes("haiku-4-5")
+		|| modelId.includes("haiku-4.5")
 	);
 }
 
+/** Map a GSD thinking level to the Anthropic effort value, clamping xhigh to max for models that lack native xhigh support. */
 function mapThinkingLevelToAnthropicEffort(level: ThinkingLevel | undefined, modelId: string): "low" | "medium" | "high" | "xhigh" | "max" {
 	switch (level) {
 		case "minimal":
@@ -747,10 +789,21 @@ export function buildSdkOptions(
 		"Bash(pwd)",
 		...(mcpServers ? Object.keys(mcpServers).map((serverName) => `mcp__${serverName}__*`) : []),
 	];
+	const supportsAdaptive = modelSupportsAdaptiveThinking(modelId);
 	const effort =
-		reasoning && modelSupportsAdaptiveThinking(modelId)
+		reasoning && supportsAdaptive
 			? mapThinkingLevelToAnthropicEffort(reasoning, modelId)
 			: undefined;
+
+	// Bug B: SDK requires thinking:{type:"adaptive"} alongside effort for adaptive thinking to activate.
+	// Bug C: SDK requires thinking:{type:"disabled"} to actually stop adaptive thinking when reasoning is off;
+	//        omitting the field leaves the SDK in its adaptive default (or persisted session state).
+	const thinkingConfig = supportsAdaptive
+		? effort
+			? { thinking: { type: "adaptive" } }
+			: { thinking: { type: "disabled" } }
+		: undefined;
+
 	return {
 		pathToClaudeCodeExecutable: getClaudePath(),
 		model: modelId,
@@ -765,11 +818,13 @@ export function buildSdkOptions(
 		...(allowedTools.length > 0 ? { allowedTools } : {}),
 		...(mcpServers ? { mcpServers } : {}),
 		betas: (modelId.includes("sonnet") || modelId.includes("opus-4-7") || modelId.includes("opus-4.7")) ? ["context-1m-2025-08-07"] : [],
+		...(thinkingConfig ?? {}),
 		...(effort ? { effort } : {}),
 		...sdkExtraOptions,
 	};
 }
 
+/** Normalise heterogeneous SDK tool-result content (string, array, or object) into a uniform `ExternalToolResultContentBlock[]`. */
 function normalizeToolResultContent(content: unknown): ExternalToolResultContentBlock[] {
 	if (typeof content === "string") {
 		return [{ type: "text", text: content }];
@@ -812,6 +867,7 @@ function normalizeToolResultContent(content: unknown): ExternalToolResultContent
 	return blocks.length > 0 ? blocks : [{ type: "text", text: "" }];
 }
 
+/** Extract tool result payloads from an SDK synthetic user message, keyed by tool-use ID. */
 export function extractToolResultsFromSdkUserMessage(message: SDKUserMessage): Array<{
 	toolUseId: string;
 	result: ExternalToolResultPayload;
@@ -862,6 +918,7 @@ export function extractToolResultsFromSdkUserMessage(message: SDKUserMessage): A
 	return extracted;
 }
 
+/** Attach external tool results from the SDK synthetic user message to their corresponding tool-call blocks by ID. */
 function attachExternalResultsToToolBlocks(
 	toolBlocks: AssistantMessage["content"],
 	toolResultsById: ReadonlyMap<string, ExternalToolResultPayload>,
@@ -920,6 +977,7 @@ export function streamViaClaudeCode(
 	return stream;
 }
 
+/** Async pump that drives the Claude Agent SDK's async-iterable message stream and pushes events into `stream`. */
 async function pumpSdkMessages(
 	model: Model<any>,
 	context: Context,
