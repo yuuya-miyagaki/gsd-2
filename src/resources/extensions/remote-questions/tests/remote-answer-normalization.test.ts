@@ -28,6 +28,7 @@ test("remote normalization: single-select Telegram answer clears depth gate (#44
   const normalized = toRoundResultResponse(remote);
   const answer = normalized.answers.depth_verification_confirm;
 
+  assert.equal(normalized.endInterview, false);
   assert.equal(answer.selected, "Yes, you got it (Recommended)");
   assert.equal(answer.notes, "");
   assert.equal(
