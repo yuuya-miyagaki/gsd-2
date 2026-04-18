@@ -19,7 +19,7 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@gsd/pi-coding-agent";
 
 import { existsSync, readFileSync } from "node:fs";
-import { join, basename } from "node:path";
+import { join, basename, relative } from "node:path";
 
 import { gsdRoot, resolveMilestonePath } from "./paths.js";
 import { projectRoot } from "./commands/context.js";
@@ -499,7 +499,7 @@ export async function handleExtractLearnings(
 
   const projectName = extractProjectName(basePath);
   const outputPath = buildLearningsOutputPath(milestoneDir, milestoneId);
-  const relativeOutputPath = outputPath.replace(basePath + "/", "");
+  const relativeOutputPath = relative(basePath, outputPath);
 
   const prompt = buildExtractLearningsPrompt({
     milestoneId,
