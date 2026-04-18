@@ -201,7 +201,7 @@ Setting `prefer_skills: []` does **not** disable skill discovery — it just mea
   - `model_policy.enabled`: boolean — enforce policy filtering before model capability scoring. Default: `true`.
   - `execution_graph.enabled`: boolean — enable DAG scheduler facade/adapters for execution. Default: `true`.
   - `gitops.enabled`: boolean — persist turn-level git transaction records. Default: `true`.
-  - `gitops.turn_action`: `"commit"` | `"snapshot"` | `"status-only"` — turn transaction mode. Default: `"status-only"`.
+  - `gitops.turn_action`: `"commit"` | `"snapshot"` | `"status-only"` — turn transaction mode. Default: `"commit"` (per-task atomic commits).
   - `gitops.turn_push`: boolean — whether turn transactions should include push intent metadata. Default: `false`.
   - `audit_unified.enabled`: boolean — dual-write unified audit envelope events. Default: `true`.
   - `plan_v2.enabled`: boolean — enable bounded clarify/research/draft/compile planning flow. Default: `true`.

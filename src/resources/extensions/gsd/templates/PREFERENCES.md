@@ -51,7 +51,7 @@ uok:
     enabled: true
   gitops:
     enabled: true
-    turn_action: status-only
+    turn_action: commit
     turn_push: false
   audit_unified:
     enabled: true

@@ -13,7 +13,7 @@ test("uok flags default to enabled when preference is unset", () => {
   assert.equal(flags.gitops, true);
   assert.equal(flags.auditUnified, true);
   assert.equal(flags.planV2, true);
-  assert.equal(flags.gitopsTurnAction, "status-only");
+  assert.equal(flags.gitopsTurnAction, "commit");
   assert.equal(flags.gitopsTurnPush, false);
 });
 

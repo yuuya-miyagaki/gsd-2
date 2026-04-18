@@ -32,7 +32,7 @@ export function resolveUokFlags(prefs: GSDPreferences | undefined): UokFlags {
     modelPolicy: uok?.model_policy?.enabled ?? true,
     executionGraph: uok?.execution_graph?.enabled ?? true,
     gitops: uok?.gitops?.enabled ?? true,
-    gitopsTurnAction: uok?.gitops?.turn_action ?? "status-only",
+    gitopsTurnAction: uok?.gitops?.turn_action ?? "commit",
     gitopsTurnPush: uok?.gitops?.turn_push === true,
     auditUnified: uok?.audit_unified?.enabled ?? true,
     planV2: uok?.plan_v2?.enabled ?? true,
