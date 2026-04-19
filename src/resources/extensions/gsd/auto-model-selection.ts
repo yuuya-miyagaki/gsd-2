@@ -488,7 +488,9 @@ export function resolveModelId<T extends { id: string; provider: string }>(
     if (providerMatch) return providerMatch;
   }
 
-  // Prefer "anthropic" as the canonical provider for Anthropic models
+  // Prefer "anthropic" as the canonical provider for Anthropic models.
+  // Transport-specific tiebreaker (ADR-012): intentionally keys on provider,
+  // not api — we want the plain Anthropic transport when multiple are available.
   const anthropicMatch = candidates.find(m => m.provider === "anthropic");
   if (anthropicMatch) return anthropicMatch;
 

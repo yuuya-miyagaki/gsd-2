@@ -523,8 +523,8 @@ export interface ContextEvent {
 export interface BeforeProviderRequestEvent {
 	type: "before_provider_request";
 	payload: unknown;
-	/** The resolved model for this request (provider, id, etc.) */
-	model?: { provider: string; id: string };
+	/** The resolved model for this request (provider, id, api, etc.) */
+	model?: { provider: string; id: string; api?: string };
 }
 
 /** Fired after user submits prompt but before agent loop. */
