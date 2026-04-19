@@ -29,10 +29,30 @@ const gsdHome = process.env.GSD_HOME || join(homedir(), ".gsd");
  * hardcoding absolute paths in the system prompt template. Only skills
  * that actually exist on disk are included in the table. (#3575)
  */
-const BUNDLED_SKILL_TRIGGERS: Array<{ trigger: string; skill: string }> = [
+export const BUNDLED_SKILL_TRIGGERS: Array<{ trigger: string; skill: string }> = [
   { trigger: "Frontend UI - web components, pages, landing pages, dashboards, React/HTML/CSS, styling", skill: "frontend-design" },
   { trigger: "macOS or iOS apps - SwiftUI, Xcode, App Store", skill: "swiftui" },
   { trigger: "Debugging - complex bugs, failing tests, root-cause investigation after standard approaches fail", skill: "debug-like-expert" },
+  { trigger: "Code review - security, performance, bugs, quality review of staged/unstaged diffs or PRs", skill: "review" },
+  { trigger: "Test generation or execution - auto-detect framework, generate tests, run suite, analyze failures", skill: "test" },
+  { trigger: "Linting/formatting - run the detected linter/formatter with auto-fix, report remaining issues", skill: "lint" },
+  { trigger: "Polishing UI details - animations, hover states, typography, borders, micro-interactions, optical alignment", skill: "make-interfaces-feel-better" },
+  { trigger: "Accessibility audit - WCAG, screen reader, keyboard navigation, a11y review", skill: "accessibility" },
+  { trigger: "Planning interviews - stress-test a plan, grill the user, resolve decision trees one branch at a time", skill: "grill-me" },
+  { trigger: "Interface design - produce 3+ radically different designs for a module/API, compare in prose, synthesize", skill: "design-an-interface" },
+  { trigger: "TDD - red-green-refactor vertical slices, never refactor while red, tests survive refactors", skill: "tdd" },
+  { trigger: "Draft a milestone brief (M###-CONTEXT.md) or PRD from current conversation context", skill: "write-milestone-brief" },
+  { trigger: "Break a plan into vertical-slice roadmap slices (M###-ROADMAP.md) or GitHub issues with dependency ordering", skill: "decompose-into-slices" },
+  { trigger: "Package spike findings into a reusable project-local skill at .claude/skills/", skill: "spike-wrap-up" },
+  { trigger: "Block completion claims until verification evidence has been produced in this message", skill: "verify-before-complete" },
+  { trigger: "Create a Model Context Protocol (MCP) server — tool design, error handling, Inspector testing, evals", skill: "create-mcp-server" },
+  { trigger: "Write documentation, proposals, specs, RFCs, or READMEs for a fresh reader", skill: "write-docs" },
+  { trigger: "Post-mortem a failed GSD auto-mode run using .gsd/activity, .gsd/journal, and .gsd/metrics.json", skill: "forensics" },
+  { trigger: "Prepare a clean cross-session handoff — continue.md + summary updates (pause/resume work)", skill: "handoff" },
+  { trigger: "Security review with STRIDE threat modeling and exploit-scenario reporting", skill: "security-review" },
+  { trigger: "HTTP/REST/GraphQL API design — verbs, status codes, pagination, errors, idempotency, versioning", skill: "api-design" },
+  { trigger: "Dependency upgrades — risk-batched, verified between batches, one major per commit", skill: "dependency-upgrade" },
+  { trigger: "Agent-first observability — structured logs, persisted failure state, health surfaces, explicit failure modes", skill: "observability" },
 ];
 
 function buildBundledSkillsTable(): string {
