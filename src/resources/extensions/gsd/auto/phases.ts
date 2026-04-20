@@ -1619,21 +1619,24 @@ export async function runUnitPhase(
   }
 
   if (unitResult.status === "cancelled") {
+    const errorCategory = unitResult.errorContext?.category;
     // Provider-error pause: pauseAuto already handled cleanup and scheduled
     // recovery. Don't hard-stop — just break out of the loop (#2762).
-    if (unitResult.errorContext?.category === "provider") {
+    if (errorCategory === "provider") {
       await emitCancelledUnitEnd(ic, unitType, unitId, unitStartSeq, unitResult.errorContext);
-      debugLog("autoLoop", { phase: "exit", reason: "provider-pause", isTransient: unitResult.errorContext.isTransient });
+      debugLog("autoLoop", { phase: "exit", reason: "provider-pause", isTransient: unitResult.errorContext?.isTransient });
       return { action: "break", reason: "provider-pause" };
     }
     // Timeout category covers two distinct scenarios:
     //   1. Session creation timeout (120s) — transient, auto-resume with backoff
     //   2. Unit hard timeout (30min+) — stuck agent, pause for manual review
+    // Transient session-failed covers recoverable newSession failures and should
+    // pause instead of hard-stopping.
     // Structural errors (TypeError, is not a function) are NOT transient
     // and must hard-stop to avoid infinite retry loops.
     if (
       unitResult.errorContext?.isTransient &&
-      unitResult.errorContext?.category === "timeout"
+      errorCategory === "timeout"
     ) {
       const isSessionCreationTimeout = unitResult.errorContext.message?.includes("Session creation timed out");
 
@@ -1695,6 +1698,20 @@ export async function runUnitPhase(
       await deps.autoCommitUnit?.(s.basePath, unitType, unitId, ctx);
       await emitCancelledUnitEnd(ic, unitType, unitId, unitStartSeq, unitResult.errorContext);
       return { action: "break", reason: "unit-hard-timeout" };
+    }
+    if (
+      unitResult.errorContext?.isTransient &&
+      errorCategory === "session-failed"
+    ) {
+      ctx.ui.notify(
+        `Session creation failed transiently for ${unitType} ${unitId}: ${unitResult.errorContext?.message ?? "unknown"}. Pausing auto-mode (recoverable).`,
+        "warning",
+      );
+      debugLog("autoLoop", { phase: "session-start-transient-pause", unitType, unitId, category: errorCategory });
+      await deps.pauseAuto(ctx, pi);
+      await deps.autoCommitUnit?.(s.basePath, unitType, unitId, ctx);
+      await emitCancelledUnitEnd(ic, unitType, unitId, unitStartSeq, unitResult.errorContext);
+      return { action: "break", reason: "session-timeout" };
     }
     // All other cancelled states (structural errors, non-transient failures): hard stop
     if (s.currentUnit) {

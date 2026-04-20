@@ -85,11 +85,6 @@ const ALLOWED_FILES: Record<string, string> = {
   "src/resources/extensions/gsd/auto-model-selection.ts":
     "canonical-provider tiebreakers (ADR-012)",
 
-  // native-search.ts fallback branch: when event.model lacks `api`, the plain
-  // `anthropic` provider is the only transport we can disambiguate by
-  // provider alone. Documented inline.
-  "src/resources/extensions/search-the-web/native-search.ts":
-    "api-less event fallback; primary path uses isAnthropicApi (ADR-012)",
 };
 
 function shouldScan(path: string): boolean {

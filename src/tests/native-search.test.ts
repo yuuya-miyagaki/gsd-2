@@ -152,10 +152,17 @@ test("before_provider_request does NOT inject for claude model on non-Anthropic 
   const pi = createMockPI();
   registerNativeSearchHooks(pi);
 
-  // GitHub Copilot (or Bedrock, etc.) serving a claude model
+  // GitHub Copilot (or Bedrock, etc.) serving a claude model.
+  // Critical: runtime model objects from copilot carry api: "anthropic-messages"
+  // because copilot routes through packages/pi-ai/src/providers/anthropic.ts.
+  // The earlier fixture omitted `api` and masked the #4492 regression.
   await pi.fire("model_select", {
     type: "model_select",
-    model: { provider: "copilot", name: "claude-sonnet-4-6" },
+    model: {
+      provider: "github-copilot",
+      api: "anthropic-messages",
+      name: "claude-sonnet-4-6",
+    },
     previousModel: undefined,
     source: "set",
   });
@@ -195,7 +202,13 @@ test("before_provider_request does NOT inject when event.model indicates non-Ant
   const result = await pi.fire("before_provider_request", {
     type: "before_provider_request",
     payload,
-    model: { provider: "github-copilot", id: "claude-sonnet-4-6" },
+    // Copilot-served claude carries api: "anthropic-messages" at runtime —
+    // include it so the test actually exercises the #4492 code path.
+    model: {
+      provider: "github-copilot",
+      api: "anthropic-messages",
+      id: "claude-sonnet-4-6",
+    },
   });
 
   assert.equal(result, undefined, "Should not modify payload when event.model says non-Anthropic");
@@ -204,6 +217,76 @@ test("before_provider_request does NOT inject when event.model indicates non-Ant
   assert.ok(
     !tools.some((t: any) => t.type === "web_search_20250305"),
     "web_search_20250305 must NOT be present for Copilot"
+  );
+});
+
+// ─── Issue #4492 regression: anthropic-shaped transports without native search ──
+
+test("before_provider_request does NOT inject for github-copilot + claude-haiku-4.5 (#4492 regression)", async () => {
+  // Reproduces the original report: provider=github-copilot, model=claude-haiku-4.5
+  // carries api: "anthropic-messages" at runtime (copilot routes through
+  // packages/pi-ai/src/providers/anthropic.ts). The #4492 change to gate on api
+  // shape alone regressed this and caused every request to fail with
+  // 400 "The use of the web search tool is not supported.".
+  const pi = createMockPI();
+  registerNativeSearchHooks(pi);
+
+  await pi.fire("model_select", {
+    type: "model_select",
+    model: {
+      provider: "github-copilot",
+      api: "anthropic-messages",
+      name: "claude-haiku-4.5",
+    },
+    previousModel: undefined,
+    source: "set",
+  });
+
+  const payload: Record<string, unknown> = {
+    model: "claude-haiku-4.5",
+    tools: [{ name: "bash", type: "custom" }],
+  };
+
+  const result = await pi.fire("before_provider_request", {
+    type: "before_provider_request",
+    payload,
+    model: {
+      provider: "github-copilot",
+      api: "anthropic-messages",
+      id: "claude-haiku-4.5",
+    },
+  });
+
+  assert.equal(result, undefined, "Should not modify payload for github-copilot + claude-haiku-4.5");
+  const tools = payload.tools as any[];
+  assert.ok(
+    !tools.some((t: any) => t.type === "web_search_20250305"),
+    "web_search_20250305 must NOT be injected for github-copilot — endpoint rejects it"
+  );
+});
+
+test("before_provider_request does NOT inject for minimax (anthropic-shaped, no native search)", async () => {
+  // MiniMax M2.x declares api: "anthropic-messages" but its endpoint does not
+  // accept web_search_20250305 — same regression class as github-copilot.
+  const pi = createMockPI();
+  registerNativeSearchHooks(pi);
+
+  const payload: Record<string, unknown> = {
+    model: "MiniMax-M2.5",
+    tools: [{ name: "bash", type: "custom" }],
+  };
+
+  const result = await pi.fire("before_provider_request", {
+    type: "before_provider_request",
+    payload,
+    model: { provider: "minimax", api: "anthropic-messages", id: "MiniMax-M2.5" },
+  });
+
+  assert.equal(result, undefined, "Should not modify payload for minimax");
+  const tools = payload.tools as any[];
+  assert.ok(
+    !tools.some((t: any) => t.type === "web_search_20250305"),
+    "web_search_20250305 must NOT be injected for minimax"
   );
 });
 

@@ -18,12 +18,19 @@ import { getSessionModelOverride } from "./session-model-override.js";
 import { logWarning } from "./workflow-logger.js";
 import { resolveUokFlags } from "./uok/flags.js";
 import { applyModelPolicyFilter } from "./uok/model-policy.js";
+import { isModelBlocked } from "./blocked-models.js";
 
 export interface ModelSelectionResult {
   /** Routing metadata for metrics recording */
   routing: { tier: string; modelDowngraded: boolean } | null;
   /** Concrete model applied before dispatch so it can be restored after a fresh session. */
   appliedModel: Model<Api> | null;
+}
+
+export interface PreferredModelConfig {
+  primary: string;
+  fallbacks: string[];
+  source: "explicit" | "synthesized";
 }
 
 function reapplyThinkingLevel(
@@ -38,9 +45,14 @@ export function resolvePreferredModelConfig(
   unitType: string,
   autoModeStartModel: { provider: string; id: string; flatRateCtx?: FlatRateContext } | null,
   isAutoMode = true,
-) {
+): PreferredModelConfig | undefined {
   const explicitConfig = resolveModelWithFallbacksForUnit(unitType);
-  if (explicitConfig) return explicitConfig;
+  if (explicitConfig) {
+    return {
+      ...explicitConfig,
+      source: "explicit",
+    };
+  }
 
   // In interactive mode, don't synthesize a routing-based model config.
   // The user's session model (/model) should be used as-is (#3962).
@@ -67,6 +79,7 @@ export function resolvePreferredModelConfig(
   return {
     primary: ceilingModel,
     fallbacks: [],
+    source: "synthesized",
   };
 }
 
@@ -132,6 +145,11 @@ export async function selectAndApplyModel(
     }
     // burn-max defaults to quality-first dispatch (no downgrade routing).
     if (prefs?.token_profile === "burn-max") {
+      routingConfig.enabled = false;
+    }
+    if (modelConfig.source === "explicit") {
+      // Explicit per-phase model preferences express hard user intent.
+      // Dynamic routing may only treat synthesized tier ceilings as downgradeable.
       routingConfig.enabled = false;
     }
     let effectiveModelConfig = modelConfig;
@@ -296,6 +314,7 @@ export async function selectAndApplyModel(
           effectiveModelConfig = {
             primary: routingResult.modelId,
             fallbacks: routingResult.fallbacks,
+            source: modelConfig.source,
           };
           // Always notify on model downgrade — users should see when their
           // model selection is overridden, not just in verbose mode (#3962).
@@ -342,6 +361,18 @@ export async function selectAndApplyModel(
           continue;
         }
         attemptedPolicyEligible = true;
+      }
+
+      // Skip models the provider has previously rejected for this account
+      // (issue #4513).  The block is persisted in .gsd/runtime/blocked-models.json
+      // so it survives /gsd auto restarts — without this, the same dead model
+      // gets reselected after every restart.
+      if (isModelBlocked(basePath, model.provider, model.id)) {
+        ctx.ui.notify(
+          `Skipping blocked model ${model.provider}/${model.id} (provider rejected it for this account).`,
+          "warning",
+        );
+        continue;
       }
 
       // Warn if the ID is ambiguous across providers
@@ -418,23 +449,33 @@ export async function selectAndApplyModel(
     // No model preference for this unit type — re-apply the model captured
     // at auto-mode start to prevent bleed from shared global settings.json (#650).
     const availableModels = ctx.modelRegistry.getAvailable();
-    const startModel = availableModels.find(
-      m => m.provider === autoModeStartModel.provider && m.id === autoModeStartModel.id,
-    );
-    if (startModel) {
-      const ok = await pi.setModel(startModel, { persist: false });
-      if (!ok) {
-        const byId = availableModels.find(m => m.id === autoModeStartModel.id);
-        if (byId) {
-          const fallbackOk = await pi.setModel(byId, { persist: false });
-          if (fallbackOk) {
-            appliedModel = byId;
-            reapplyThinkingLevel(pi, autoModeStartThinkingLevel);
+    const startBlocked = isModelBlocked(basePath, autoModeStartModel.provider, autoModeStartModel.id);
+    if (startBlocked) {
+      ctx.ui.notify(
+        `Auto-mode start model ${autoModeStartModel.provider}/${autoModeStartModel.id} is blocked for this account. Using current session model instead.`,
+        "warning",
+      );
+    } else {
+      const startModel = availableModels.find(
+        m => m.provider === autoModeStartModel.provider && m.id === autoModeStartModel.id,
+      );
+      if (startModel) {
+        const ok = await pi.setModel(startModel, { persist: false });
+        if (!ok) {
+          const byId = availableModels.find(
+            m => m.id === autoModeStartModel.id && !isModelBlocked(basePath, m.provider, m.id),
+          );
+          if (byId) {
+            const fallbackOk = await pi.setModel(byId, { persist: false });
+            if (fallbackOk) {
+              appliedModel = byId;
+              reapplyThinkingLevel(pi, autoModeStartThinkingLevel);
+            }
           }
+        } else {
+          appliedModel = startModel;
+          reapplyThinkingLevel(pi, autoModeStartThinkingLevel);
         }
-      } else {
-        appliedModel = startModel;
-        reapplyThinkingLevel(pi, autoModeStartThinkingLevel);
       }
     }
   }
